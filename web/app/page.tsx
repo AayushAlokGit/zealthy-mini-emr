@@ -3,34 +3,30 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { HeartPulse } from "lucide-react";
 
 import { api, ApiError } from "@/lib/api";
-import { loginSchema, type LoginForm } from "@/lib/schemas";
 import type { Patient } from "@/lib/types";
 import { Button } from "@/components/ui/primitives";
 import { Field, Input } from "@/components/ui/form";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [serverError, setServerError] = useState<string | null>(null);
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(values: LoginForm) {
-    setServerError(null);
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     try {
-      await api.post<Patient>("/api/auth/login", values);
+      await api.post<Patient>("/api/auth/login", { email, password });
       router.push("/dashboard");
     } catch (err) {
-      setServerError(
-        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
-      );
+      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      setSubmitting(false);
     }
   }
 
@@ -46,21 +42,35 @@ export default function LoginPage() {
         </div>
 
         <form
-          onSubmit={handleSubmit(onSubmit)}
+          onSubmit={onSubmit}
           className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
         >
-          <Field label="Email" error={errors.email?.message}>
-            <Input type="email" autoComplete="email" placeholder="you@example.com" {...register("email")} />
+          <Field label="Email">
+            <Input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </Field>
-          <Field label="Password" error={errors.password?.message}>
-            <Input type="password" autoComplete="current-password" placeholder="••••••••" {...register("password")} />
+          <Field label="Password">
+            <Input
+              type="password"
+              required
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </Field>
 
-          {serverError && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{serverError}</p>
+          {error && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
           )}
 
-          <Button type="submit" loading={isSubmitting} className="w-full">
+          <Button type="submit" loading={submitting} className="w-full">
             Sign in
           </Button>
 

@@ -6,9 +6,8 @@ import { ArrowLeft } from "lucide-react";
 
 import { api } from "@/lib/api";
 import type { Patient } from "@/lib/types";
-import type { PatientForm as PatientFormValues } from "@/lib/schemas";
+import { PatientForm, type PatientFormValues } from "@/components/admin/PatientForm";
 import { AdminHeader } from "@/components/admin/AdminHeader";
-import { PatientForm } from "@/components/admin/PatientForm";
 import { Card } from "@/components/ui/primitives";
 
 export default function NewPatientPage() {

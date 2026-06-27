@@ -1,12 +1,11 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import useSWR from "swr";
 import { HeartPulse, LogOut } from "lucide-react";
 
-import { api, fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { Patient } from "@/lib/types";
 import { LoadingState } from "@/components/ui/feedback";
 import { cn } from "@/components/ui/cn";
@@ -21,18 +20,35 @@ const tabs = [
 export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: patient, error, isLoading } = useSWR<Patient>("/api/auth/me", fetcher, {
-    shouldRetryOnError: false,
-    onError: () => router.replace("/"),
-  });
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const me = await api.get<Patient>("/api/auth/me");
+        if (!cancelled) {
+          setPatient(me);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) router.replace("/");
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   async function logout() {
     await api.post("/api/auth/logout");
     router.replace("/");
   }
 
-  if (isLoading) return <LoadingState label="Loading your portal…" />;
-  if (error || !patient) return <LoadingState label="Redirecting to sign in…" />;
+  if (loading) return <LoadingState label="Loading your portal…" />;
+  if (!patient) return <LoadingState label="Redirecting to sign in…" />;
 
   return (
     <div className="min-h-screen">

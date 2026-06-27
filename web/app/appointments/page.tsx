@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useEffect, useState } from "react";
 import { parseISO } from "date-fns";
 import { CalendarDays, List } from "lucide-react";
 
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { AppointmentOccurrence } from "@/lib/types";
 import { formatDateTime, repeatLabel } from "@/lib/format";
 import { PortalShell } from "@/components/portal/PortalShell";
@@ -24,10 +23,31 @@ export default function AppointmentsPage() {
 
 function Appointments() {
   const [view, setView] = useState<"list" | "calendar">("list");
-  const { data, error, isLoading, mutate } = useSWR<AppointmentOccurrence[]>(
-    "/api/me/appointments",
-    fetcher,
-  );
+  const [data, setData] = useState<AppointmentOccurrence[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const list = await api.get<AppointmentOccurrence[]>("/api/me/appointments");
+        if (!cancelled) {
+          setData(list);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const events: CalendarEvent[] =
     data?.map((a) => ({
@@ -55,10 +75,10 @@ function Appointments() {
       </div>
 
       <Card className="p-5">
-        {isLoading ? (
+        {loading ? (
           <LoadingState />
         ) : error ? (
-          <ErrorState message="Could not load appointments." onRetry={() => mutate()} />
+          <ErrorState message="Could not load appointments." onRetry={() => setReloadKey((k) => k + 1)} />
         ) : !data || data.length === 0 ? (
           <EmptyState title="No upcoming appointments" hint="Your provider will schedule these for you." />
         ) : view === "calendar" ? (

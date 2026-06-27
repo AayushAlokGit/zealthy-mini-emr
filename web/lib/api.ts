@@ -40,5 +40,3 @@ export const api = {
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   del: (path: string) => request<void>(path, { method: "DELETE" }),
 };
-
-export const fetcher = <T>(path: string) => api.get<T>(path);

@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useEffect, useState } from "react";
 import { Bell, Check } from "lucide-react";
 
-import { api, fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { NotificationList } from "@/lib/types";
 import { formatDateTime } from "@/lib/format";
 
@@ -12,21 +11,40 @@ const POLL_MS = 30_000;
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const { data, mutate } = useSWR<NotificationList>("/api/me/notifications", fetcher, {
-    refreshInterval: POLL_MS,
-  });
+  const [data, setData] = useState<NotificationList | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const list = await api.get<NotificationList>("/api/me/notifications");
+        if (!cancelled) setData(list);
+      } catch {
+        // keep showing the last successful fetch
+      }
+    }
+    load();
+    const id = setInterval(load, POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [reloadKey]);
+
+  const reload = () => setReloadKey((k) => k + 1);
 
   const unread = data?.unreadCount ?? 0;
   const items = data?.items ?? [];
 
   async function markAll() {
     await api.post("/api/me/notifications/read-all");
-    mutate();
+    reload();
   }
 
   async function markOne(id: number) {
     await api.patch(`/api/me/notifications/${id}/read`, {});
-    mutate();
+    reload();
   }
 
   return (

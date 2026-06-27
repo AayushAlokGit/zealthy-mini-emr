@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import useSWR from "swr";
 import { parseISO, format } from "date-fns";
 import { ArrowLeft, Pencil, Plus, Trash2, CalendarOff, CalendarDays } from "lucide-react";
 
-import { api, fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 import type {
   Patient,
   Appointment,
@@ -15,7 +14,7 @@ import type {
   AdminOccurrence,
   AdminRefillOccurrence,
 } from "@/lib/types";
-import type { PatientForm as PatientValues } from "@/lib/schemas";
+import type { PatientFormValues } from "@/components/admin/PatientForm";
 import { formatDate, formatDateTime, formatTime, repeatLabel } from "@/lib/format";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { PatientForm } from "@/components/admin/PatientForm";
@@ -32,13 +31,34 @@ export default function PatientDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
-  const patient = useSWR<Patient>(`/api/patients/${id}`, fetcher);
-  const appts = useSWR<Appointment[]>(`/api/patients/${id}/appointments`, fetcher);
-  const rxs = useSWR<Prescription[]>(`/api/patients/${id}/prescriptions`, fetcher);
-
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [editingPatient, setEditingPatient] = useState(false);
 
-  async function updatePatient(values: PatientValues) {
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const p = await api.get<Patient>(`/api/patients/${id}`);
+        if (!cancelled) {
+          setPatient(p);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, reloadKey]);
+
+  async function updatePatient(values: PatientFormValues) {
     await api.patch(`/api/patients/${id}`, {
       name: values.name,
       email: values.email,
@@ -47,25 +67,23 @@ export default function PatientDetailPage() {
       ...(values.password ? { password: values.password } : {}),
     });
     setEditingPatient(false);
-    patient.mutate();
+    setReloadKey((k) => k + 1);
   }
 
-  if (patient.isLoading) {
+  if (loading) {
     return (
       <Shell>
         <LoadingState />
       </Shell>
     );
   }
-  if (patient.error || !patient.data) {
+  if (error || !patient) {
     return (
       <Shell>
         <ErrorState message="Patient not found." />
       </Shell>
     );
   }
-
-  const p = patient.data;
 
   return (
     <Shell>
@@ -79,11 +97,11 @@ export default function PatientDetailPage() {
       <Card className="mb-6 p-5">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-800">{p.name}</h1>
-            <p className="text-sm text-slate-500">{p.email}</p>
+            <h1 className="text-2xl font-semibold text-slate-800">{patient.name}</h1>
+            <p className="text-sm text-slate-500">{patient.email}</p>
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">
-              <span>Phone: {p.phone ?? "—"}</span>
-              <span>DOB: {p.dob ? formatDate(p.dob) : "—"}</span>
+              <span>Phone: {patient.phone ?? "—"}</span>
+              <span>DOB: {patient.dob ? formatDate(patient.dob) : "—"}</span>
             </div>
           </div>
           <Button variant="secondary" onClick={() => setEditingPatient(true)}>
@@ -92,18 +110,18 @@ export default function PatientDetailPage() {
         </div>
       </Card>
 
-      <AppointmentsSection patientId={id} swr={appts} />
-      <PrescriptionsSection patientId={id} swr={rxs} />
+      <AppointmentsSection patientId={id} />
+      <PrescriptionsSection patientId={id} />
 
       <Modal open={editingPatient} onClose={() => setEditingPatient(false)} title="Edit patient">
         <PatientForm
           mode="edit"
           defaultValues={{
-            name: p.name,
-            email: p.email,
+            name: patient.name,
+            email: patient.email,
             password: "",
-            dob: p.dob ?? "",
-            phone: p.phone ?? "",
+            dob: patient.dob ?? "",
+            phone: patient.phone ?? "",
           }}
           onSubmit={updatePatient}
           submitLabel="Save changes"
@@ -122,28 +140,61 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AppointmentsSection({
-  patientId,
-  swr,
-}: {
-  patientId: string;
-  swr: ReturnType<typeof useSWR<Appointment[]>>;
-}) {
-  const { data, isLoading, error, mutate } = swr;
+function AppointmentsSection({ patientId }: { patientId: string }) {
+  const [data, setData] = useState<Appointment[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [deleting, setDeleting] = useState<Appointment | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingOcc, setEditingOcc] = useState<AdminOccurrence | null>(null);
 
-  const schedule = useSWR<AdminOccurrence[]>(
-    showCalendar ? `/api/patients/${patientId}/schedule` : null,
-    fetcher,
-  );
+  const [schedule, setSchedule] = useState<AdminOccurrence[] | null>(null);
+  const scheduleLoading = showCalendar && schedule === null;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const list = await api.get<Appointment[]>(`/api/patients/${patientId}/appointments`);
+        if (!cancelled) {
+          setData(list);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, reloadKey]);
+
+  useEffect(() => {
+    if (!showCalendar) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        const occ = await api.get<AdminOccurrence[]>(`/api/patients/${patientId}/schedule`);
+        if (!cancelled) setSchedule(occ);
+      } catch {
+        // schedule is best-effort; the list view remains usable
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, showCalendar, reloadKey]);
 
   function refreshAll() {
-    mutate();
-    schedule.mutate();
+    setReloadKey((k) => k + 1);
   }
 
   async function create(payload: AppointmentPayload) {
@@ -167,7 +218,7 @@ function AppointmentsSection({
   }
 
   const events: CalendarEvent[] =
-    schedule.data?.map((o) => ({
+    schedule?.map((o) => ({
       date: parseISO(o.occursAt),
       title: o.provider,
       subtitle: `${formatTime(o.occursAt)}${o.cancelled ? " · cancelled" : o.overridden ? " · rescheduled" : ""}`,
@@ -192,14 +243,14 @@ function AppointmentsSection({
         }
       />
       <div className="p-4">
-        {isLoading ? (
+        {loading ? (
           <LoadingState />
         ) : error ? (
-          <ErrorState message="Could not load appointments." onRetry={() => mutate()} />
+          <ErrorState message="Could not load appointments." onRetry={refreshAll} />
         ) : !data || data.length === 0 ? (
           <EmptyState title="No appointments" hint="Schedule the first one." />
         ) : showCalendar ? (
-          schedule.isLoading ? (
+          scheduleLoading ? (
             <LoadingState />
           ) : (
             <Calendar events={events} onSelectEvent={(e) => setEditingOcc(e.payload as AdminOccurrence)} />
@@ -261,28 +312,61 @@ function AppointmentsSection({
   );
 }
 
-function PrescriptionsSection({
-  patientId,
-  swr,
-}: {
-  patientId: string;
-  swr: ReturnType<typeof useSWR<Prescription[]>>;
-}) {
-  const { data, isLoading, error, mutate } = swr;
+function PrescriptionsSection({ patientId }: { patientId: string }) {
+  const [data, setData] = useState<Prescription[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Prescription | null>(null);
   const [deleting, setDeleting] = useState<Prescription | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingOcc, setEditingOcc] = useState<AdminRefillOccurrence | null>(null);
 
-  const schedule = useSWR<AdminRefillOccurrence[]>(
-    showCalendar ? `/api/patients/${patientId}/refill-schedule` : null,
-    fetcher,
-  );
+  const [schedule, setSchedule] = useState<AdminRefillOccurrence[] | null>(null);
+  const scheduleLoading = showCalendar && schedule === null;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const list = await api.get<Prescription[]>(`/api/patients/${patientId}/prescriptions`);
+        if (!cancelled) {
+          setData(list);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, reloadKey]);
+
+  useEffect(() => {
+    if (!showCalendar) return;
+    let cancelled = false;
+    async function load() {
+      try {
+        const occ = await api.get<AdminRefillOccurrence[]>(`/api/patients/${patientId}/refill-schedule`);
+        if (!cancelled) setSchedule(occ);
+      } catch {
+        // schedule is best-effort; the list view remains usable
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, showCalendar, reloadKey]);
 
   function refreshAll() {
-    mutate();
-    schedule.mutate();
+    setReloadKey((k) => k + 1);
   }
 
   async function create(payload: PrescriptionPayload) {
@@ -302,7 +386,7 @@ function PrescriptionsSection({
   }
 
   const events: CalendarEvent[] =
-    schedule.data?.map((o) => ({
+    schedule?.map((o) => ({
       date: parseISO(`${o.refillOn}T00:00:00`),
       title: `${o.medication} ${o.dosage}`,
       subtitle: `Qty ${o.quantity}${o.cancelled ? " · skipped" : o.overridden ? " · adjusted" : ""}`,
@@ -327,14 +411,14 @@ function PrescriptionsSection({
         }
       />
       <div className="p-4">
-        {isLoading ? (
+        {loading ? (
           <LoadingState />
         ) : error ? (
-          <ErrorState message="Could not load prescriptions." onRetry={() => mutate()} />
+          <ErrorState message="Could not load prescriptions." onRetry={refreshAll} />
         ) : !data || data.length === 0 ? (
           <EmptyState title="No prescriptions" hint="Prescribe the first medication." />
         ) : showCalendar ? (
-          schedule.isLoading ? (
+          scheduleLoading ? (
             <LoadingState />
           ) : (
             <Calendar events={events} onSelectEvent={(e) => setEditingOcc(e.payload as AdminRefillOccurrence)} />

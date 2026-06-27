@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
+import { useEffect, useState } from "react";
 import { parseISO } from "date-fns";
 import { CalendarDays, List, Pill } from "lucide-react";
 
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { Prescription, RefillOccurrence } from "@/lib/types";
 import { formatDate, repeatLabel } from "@/lib/format";
 import { PortalShell } from "@/components/portal/PortalShell";
@@ -23,12 +22,59 @@ export default function PrescriptionsPage() {
 }
 
 function Prescriptions() {
-  const rx = useSWR<Prescription[]>("/api/me/prescriptions", fetcher);
-  const refills = useSWR<RefillOccurrence[]>("/api/me/refills", fetcher);
   const [view, setView] = useState<"list" | "calendar">("list");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [rx, setRx] = useState<Prescription[] | null>(null);
+  const [rxLoading, setRxLoading] = useState(true);
+  const [rxError, setRxError] = useState(false);
+
+  const [refills, setRefills] = useState<RefillOccurrence[] | null>(null);
+  const [refillsLoading, setRefillsLoading] = useState(true);
+  const [refillsError, setRefillsError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRx() {
+      try {
+        const list = await api.get<Prescription[]>("/api/me/prescriptions");
+        if (!cancelled) {
+          setRx(list);
+          setRxError(false);
+        }
+      } catch {
+        if (!cancelled) setRxError(true);
+      } finally {
+        if (!cancelled) setRxLoading(false);
+      }
+    }
+
+    async function loadRefills() {
+      try {
+        const list = await api.get<RefillOccurrence[]>("/api/me/refills");
+        if (!cancelled) {
+          setRefills(list);
+          setRefillsError(false);
+        }
+      } catch {
+        if (!cancelled) setRefillsError(true);
+      } finally {
+        if (!cancelled) setRefillsLoading(false);
+      }
+    }
+
+    loadRx();
+    loadRefills();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const reload = () => setReloadKey((k) => k + 1);
 
   const events: CalendarEvent[] =
-    refills.data?.map((r) => ({
+    refills?.map((r) => ({
       date: parseISO(`${r.refillOn}T00:00:00`),
       title: r.medication,
       subtitle: `${r.dosage} · Qty ${r.quantity}`,
@@ -46,15 +92,15 @@ function Prescriptions() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Your medications
         </h2>
-        {rx.isLoading ? (
+        {rxLoading ? (
           <LoadingState />
-        ) : rx.error ? (
-          <ErrorState message="Could not load prescriptions." onRetry={() => rx.mutate()} />
-        ) : !rx.data || rx.data.length === 0 ? (
+        ) : rxError ? (
+          <ErrorState message="Could not load prescriptions." onRetry={reload} />
+        ) : !rx || rx.length === 0 ? (
           <EmptyState title="No prescriptions on file" />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {rx.data.map((p) => (
+            {rx.map((p) => (
               <div key={p.id} className="rounded-lg border border-slate-200 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -89,17 +135,17 @@ function Prescriptions() {
             </ToggleBtn>
           </div>
         </div>
-        {refills.isLoading ? (
+        {refillsLoading ? (
           <LoadingState />
-        ) : refills.error ? (
-          <ErrorState message="Could not load refills." onRetry={() => refills.mutate()} />
-        ) : !refills.data || refills.data.length === 0 ? (
+        ) : refillsError ? (
+          <ErrorState message="Could not load refills." onRetry={reload} />
+        ) : !refills || refills.length === 0 ? (
           <EmptyState title="No refills scheduled" />
         ) : view === "calendar" ? (
           <Calendar events={events} />
         ) : (
           <ul className="divide-y divide-slate-100">
-            {refills.data.map((r, i) => (
+            {refills.map((r, i) => (
               <li key={`${r.prescriptionId}-${i}`} className="flex items-center justify-between py-3">
                 <div>
                   <p className="text-sm font-medium text-slate-800">

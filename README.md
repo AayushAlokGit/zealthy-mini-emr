@@ -32,15 +32,15 @@ LLD.md      the low-level design this was built from
 | Concern | Choice | Why |
 |---|---|---|
 | Frontend | Next.js + TypeScript + Tailwind | Required framework; typed end-to-end |
-| Data fetching | SWR | Declarative loading/error states + notification polling |
-| Forms | react-hook-form + **Zod** | Inline validation; one schema → types + checks |
+| Data fetching | Plain `useState` + `useEffect` (`async/await`) | No data-layer library; a thin `api` fetch client wraps the cookie + error handling |
+| Forms | Controlled inputs + native HTML5 validation | No form library; the server (Pydantic) is the validation gate |
 | Backend | FastAPI + **Pydantic** | Async, auto-OpenAPI, authoritative validation |
 | ORM / DB | SQLAlchemy + SQLite | Zero-config; portable to Postgres via one URL |
 | Auth | bcrypt + JWT in an httpOnly cookie | Hashed passwords; XSS-safer than localStorage |
 
-**Validation is layered:** Pydantic on the backend is the authoritative gate; Zod on
-the frontend mirrors it for instant UX. The backend serves an OpenAPI schema at
-`/openapi.json`, so the TS types can be regenerated from it if desired.
+**Validation is layered:** Pydantic on the backend is the authoritative gate. The
+frontend uses native HTML5 constraints (`required`, `type`, `min`) for instant feedback
+and surfaces the server's error messages on submit.
 
 ### The core idea: recurrence as rules, not rows
 

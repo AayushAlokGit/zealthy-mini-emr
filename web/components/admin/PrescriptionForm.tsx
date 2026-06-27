@@ -1,13 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import useSWR from "swr";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useState } from "react";
 
-import { ApiError, fetcher } from "@/lib/api";
-import { prescriptionSchema, type PrescriptionForm as Values } from "@/lib/schemas";
-import type { Prescription } from "@/lib/types";
+import { api, ApiError } from "@/lib/api";
+import type { Prescription, Repeat } from "@/lib/types";
 import { Button } from "@/components/ui/primitives";
 import { Field, Input, Select } from "@/components/ui/form";
 
@@ -16,7 +12,7 @@ export interface PrescriptionPayload {
   dosage: string;
   quantity: number;
   refillOn: string;
-  refillSchedule: Values["refillSchedule"];
+  refillSchedule: Repeat;
   until: string | null;
 }
 
@@ -27,65 +23,77 @@ interface Props {
 }
 
 export function PrescriptionForm({ existing, onSubmit, onDone }: Props) {
-  const [serverError, setServerError] = useState<string | null>(null);
-  const { data: medications } = useSWR<string[]>("/api/medications", fetcher);
-  const { data: dosages } = useSWR<string[]>("/api/dosages", fetcher);
+  const [medications, setMedications] = useState<string[]>([]);
+  const [dosages, setDosages] = useState<string[]>([]);
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<Values>({
-    resolver: zodResolver(prescriptionSchema),
-    defaultValues: existing
-      ? {
-          medication: existing.medication,
-          dosage: existing.dosage,
-          quantity: existing.quantity,
-          refillOn: existing.refillOn,
-          refillSchedule: existing.refillSchedule,
-          until: existing.until ?? "",
+  const [medication, setMedication] = useState(existing?.medication ?? "");
+  const [dosage, setDosage] = useState(existing?.dosage ?? "");
+  const [quantity, setQuantity] = useState(existing?.quantity ?? 1);
+  const [refillOn, setRefillOn] = useState(existing?.refillOn ?? "");
+  const [refillSchedule, setRefillSchedule] = useState<Repeat>(existing?.refillSchedule ?? "MONTHLY");
+  const [until, setUntil] = useState(existing?.until ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOptions() {
+      try {
+        const [meds, doses] = await Promise.all([
+          api.get<string[]>("/api/medications"),
+          api.get<string[]>("/api/dosages"),
+        ]);
+        if (!cancelled) {
+          setMedications(meds);
+          setDosages(doses);
         }
-      : { quantity: 1, refillSchedule: "MONTHLY", medication: "", dosage: "", refillOn: "", until: "" },
-  });
+      } catch {
+        // dropdowns stay empty if the lookups fail
+      }
+    }
+    loadOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const schedule = watch("refillSchedule");
-
-  async function submit(values: Values) {
-    setServerError(null);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     try {
       await onSubmit({
-        medication: values.medication,
-        dosage: values.dosage,
-        quantity: values.quantity,
-        refillOn: values.refillOn,
-        refillSchedule: values.refillSchedule,
-        until: values.refillSchedule !== "NONE" && values.until ? values.until : null,
+        medication,
+        dosage,
+        quantity,
+        refillOn,
+        refillSchedule,
+        until: refillSchedule !== "NONE" && until ? until : null,
       });
       onDone();
     } catch (err) {
-      setServerError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Medication" error={errors.medication?.message}>
-          <Select {...register("medication")}>
+        <Field label="Medication">
+          <Select required value={medication} onChange={(e) => setMedication(e.target.value)}>
             <option value="">Select…</option>
-            {medications?.map((m) => (
+            {medications.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
             ))}
           </Select>
         </Field>
-        <Field label="Dosage" error={errors.dosage?.message}>
-          <Select {...register("dosage")}>
+        <Field label="Dosage">
+          <Select required value={dosage} onChange={(e) => setDosage(e.target.value)}>
             <option value="">Select…</option>
-            {dosages?.map((d) => (
+            {dosages.map((d) => (
               <option key={d} value={d}>
                 {d}
               </option>
@@ -94,35 +102,41 @@ export function PrescriptionForm({ existing, onSubmit, onDone }: Props) {
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Quantity" error={errors.quantity?.message}>
-          <Input type="number" min={1} {...register("quantity", { valueAsNumber: true })} />
+        <Field label="Quantity">
+          <Input
+            type="number"
+            min={1}
+            required
+            value={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
+          />
         </Field>
-        <Field label="First refill on" error={errors.refillOn?.message}>
-          <Input type="date" {...register("refillOn")} />
+        <Field label="First refill on">
+          <Input type="date" required value={refillOn} onChange={(e) => setRefillOn(e.target.value)} />
         </Field>
       </div>
-      <Field label="Refill schedule" error={errors.refillSchedule?.message}>
-        <Select {...register("refillSchedule")}>
+      <Field label="Refill schedule">
+        <Select value={refillSchedule} onChange={(e) => setRefillSchedule(e.target.value as Repeat)}>
           <option value="NONE">One-time</option>
           <option value="WEEKLY">Weekly</option>
           <option value="MONTHLY">Monthly</option>
         </Select>
       </Field>
-      {schedule !== "NONE" && (
-        <Field label="End refills on" error={errors.until?.message} hint="Optional — leave blank for ongoing.">
-          <Input type="date" {...register("until")} />
+      {refillSchedule !== "NONE" && (
+        <Field label="End refills on" hint="Optional — leave blank for ongoing.">
+          <Input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
         </Field>
       )}
 
-      {serverError && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{serverError}</p>
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
       )}
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="secondary" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" loading={isSubmitting}>
+        <Button type="submit" loading={submitting}>
           {existing ? "Save changes" : "Prescribe"}
         </Button>
       </div>

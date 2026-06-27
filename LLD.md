@@ -24,10 +24,9 @@ A full-stack application with two surfaces sharing one backend + database:
 | Frontend | Next.js (App Router) + TypeScript + Tailwind | Spec requires React/Next; App Router for clean routing; TS for safety |
 | Backend | FastAPI + Pydantic | Async Python, auto OpenAPI, Pydantic = authoritative validation |
 | ORM / DB | SQLAlchemy + Alembic + **SQLite** | Zero-config, file-based, ideal for a seeded demo; portable to Postgres via connection string |
-| Auth | `passlib[bcrypt]` + JWT (httpOnly cookie) | Hashed passwords (still testable with seed creds); stateless sessions |
-| FE validation | Zod | Instant inline form errors + safe response parsing |
-| Type bridge | `openapi-typescript` against FastAPI `/openapi.json` | Generates TS types from Python models → end-to-end type safety across the language boundary |
-| Deploy | Vercel (web) + Railway/Render/Fly (api) | Standard, free tiers |
+| Auth | `bcrypt` + JWT (httpOnly cookie) | Hashed passwords (still testable with seed creds); stateless sessions |
+| FE data/forms | Plain `useState`/`useEffect` + controlled inputs | No data or form library; a thin `api` client wraps fetch; HTML5 validation + server errors |
+| Deploy | Vercel (web) + Render (api) | Standard, free tiers |
 
 ---
 
@@ -49,9 +48,9 @@ zealthy/
 │  │  └─ layout.tsx
 │  ├─ components/             # Tables, forms, calendar, notification bell, dialogs
 │  ├─ lib/
-│  │  ├─ api.ts               # Typed fetch client (uses generated types)
-│  │  ├─ schemas.ts           # Zod schemas (forms)
-│  │  └─ types.gen.ts         # Generated from OpenAPI
+│  │  ├─ api.ts               # Thin typed fetch client (cookie + error handling)
+│  │  ├─ types.ts             # API response types
+│  │  └─ format.ts            # Date/label formatting helpers
 │  └─ ...
 ├─ api/                       # FastAPI backend
 │  ├─ app/
@@ -307,10 +306,10 @@ Base: `/api`. JSON. Pydantic-validated. Errors return `{ "detail": ... }` with p
 | Layer | Tool | Role |
 |---|---|---|
 | Backend | **Pydantic** | Authoritative. Rejects bad payloads, enforces enums, ranges (`quantity>0`), medication/dosage membership |
-| Frontend | **Zod** | UX: inline form errors before submit; safe parse of API responses |
-| Bridge | **openapi-typescript** | TS types generated from FastAPI OpenAPI → no manual type drift |
+| Frontend | **HTML5 constraints** | UX: `required`, `type="email"`, `min` for instant feedback before submit |
 
-Never trust the client; Pydantic is the gate. Zod is for fast feedback.
+Never trust the client; Pydantic is the gate. The frontend surfaces the server's error
+messages on submit.
 
 ---
 
@@ -340,7 +339,7 @@ Every data view has explicit **loading / error / empty** states (Tier 0).
 4. **Auth** (hash, login, JWT cookie, guard dependency).
 5. **EMR API** (patients/appts/rx CRUD + notification emit).
 6. **Portal API** (`/me/*` summary, schedule, notifications — using the engine).
-7. **OpenAPI → TS types**; typed API client + Zod schemas.
+7. **Typed API client** + response types.
 8. **EMR UI** (table, forms, detail, calendar).
 9. **Portal UI** (login, dashboard, drill-downs, notification bell).
 10. **Polish** (states, validation messages), **README**, **deploy**.

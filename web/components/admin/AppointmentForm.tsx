@@ -1,20 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO } from "date-fns";
 
 import { ApiError } from "@/lib/api";
-import { appointmentSchema, type AppointmentForm as Values } from "@/lib/schemas";
-import type { Appointment } from "@/lib/types";
+import type { Appointment, Repeat } from "@/lib/types";
 import { Button } from "@/components/ui/primitives";
 import { Field, Input, Select } from "@/components/ui/form";
 
 export interface AppointmentPayload {
   provider: string;
   startAt: string;
-  repeat: Values["repeat"];
+  repeat: Repeat;
   until: string | null;
 }
 
@@ -27,71 +24,61 @@ interface Props {
 const toLocalInput = (iso: string) => format(parseISO(iso), "yyyy-MM-dd'T'HH:mm");
 
 export function AppointmentForm({ existing, onSubmit, onDone }: Props) {
-  const [serverError, setServerError] = useState<string | null>(null);
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<Values>({
-    resolver: zodResolver(appointmentSchema),
-    defaultValues: existing
-      ? {
-          provider: existing.provider,
-          startAt: toLocalInput(existing.startAt),
-          repeat: existing.repeat,
-          until: existing.until ?? "",
-        }
-      : { repeat: "NONE", provider: "", startAt: "", until: "" },
-  });
+  const [provider, setProvider] = useState(existing?.provider ?? "");
+  const [startAt, setStartAt] = useState(existing ? toLocalInput(existing.startAt) : "");
+  const [repeat, setRepeat] = useState<Repeat>(existing?.repeat ?? "NONE");
+  const [until, setUntil] = useState(existing?.until ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const repeat = watch("repeat");
-
-  async function submit(values: Values) {
-    setServerError(null);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     try {
       await onSubmit({
-        provider: values.provider,
-        startAt: new Date(values.startAt).toISOString(),
-        repeat: values.repeat,
-        until: values.repeat !== "NONE" && values.until ? values.until : null,
+        provider,
+        startAt: new Date(startAt).toISOString(),
+        repeat,
+        until: repeat !== "NONE" && until ? until : null,
       });
       onDone();
     } catch (err) {
-      setServerError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-4">
-      <Field label="Provider" error={errors.provider?.message}>
-        <Input placeholder="Dr Jane Smith" {...register("provider")} />
+    <form onSubmit={submit} className="space-y-4">
+      <Field label="Provider">
+        <Input required placeholder="Dr Jane Smith" value={provider} onChange={(e) => setProvider(e.target.value)} />
       </Field>
-      <Field label="First appointment" error={errors.startAt?.message}>
-        <Input type="datetime-local" {...register("startAt")} />
+      <Field label="First appointment">
+        <Input type="datetime-local" required value={startAt} onChange={(e) => setStartAt(e.target.value)} />
       </Field>
-      <Field label="Repeats" error={errors.repeat?.message}>
-        <Select {...register("repeat")}>
+      <Field label="Repeats">
+        <Select value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
           <option value="NONE">Does not repeat</option>
           <option value="WEEKLY">Weekly</option>
           <option value="MONTHLY">Monthly</option>
         </Select>
       </Field>
       {repeat !== "NONE" && (
-        <Field label="End recurrence on" error={errors.until?.message} hint="Optional — leave blank for ongoing.">
-          <Input type="date" {...register("until")} />
+        <Field label="End recurrence on" hint="Optional — leave blank for ongoing.">
+          <Input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
         </Field>
       )}
 
-      {serverError && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{serverError}</p>
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
       )}
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="secondary" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" loading={isSubmitting}>
+        <Button type="submit" loading={submitting}>
           {existing ? "Save changes" : "Schedule"}
         </Button>
       </div>
