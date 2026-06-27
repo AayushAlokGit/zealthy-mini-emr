@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..auth import hash_password
 from ..db import get_db
+from ..logging_setup import get_logger
 from ..models import Appointment, Patient, Prescription
 from ..occurrences import expand_appointment, expand_prescription
 from ..recurrence import add_months, next_occurrence
@@ -21,6 +22,7 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
+log = get_logger("patients")
 
 
 @router.get("", response_model=list[PatientListItem])
@@ -61,6 +63,7 @@ def list_patients(db: Session = Depends(get_db)):
 def _get_patient(db: Session, patient_id: int) -> Patient:
     patient = db.scalar(select(Patient).where(Patient.id == patient_id))
     if patient is None:
+        log.warning("Patient %s not found", patient_id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient not found")
     return patient
 
@@ -69,6 +72,7 @@ def _get_patient(db: Session, patient_id: int) -> Patient:
 def create_patient(body: PatientCreate, db: Session = Depends(get_db)):
     exists = db.scalar(select(Patient).where(Patient.email == body.email))
     if exists is not None:
+        log.warning("Rejected patient create: email already in use (%s)", body.email)
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already in use")
 
     patient = Patient(
@@ -81,6 +85,7 @@ def create_patient(body: PatientCreate, db: Session = Depends(get_db)):
     db.add(patient)
     db.commit()
     db.refresh(patient)
+    log.info("Created patient %s (%s)", patient.id, patient.email)
     return patient
 
 
@@ -97,6 +102,7 @@ def update_patient(patient_id: int, body: PatientUpdate, db: Session = Depends(g
     if "email" in data and data["email"] != patient.email:
         clash = db.scalar(select(Patient).where(Patient.email == data["email"]))
         if clash is not None:
+            log.warning("Rejected patient %s update: email already in use", patient_id)
             raise HTTPException(status.HTTP_409_CONFLICT, "Email already in use")
     if "password" in data:
         patient.password_hash = hash_password(data.pop("password"))
@@ -105,6 +111,7 @@ def update_patient(patient_id: int, body: PatientUpdate, db: Session = Depends(g
 
     db.commit()
     db.refresh(patient)
+    log.info("Updated patient %s (fields: %s)", patient.id, ", ".join(data) or "none")
     return patient
 
 

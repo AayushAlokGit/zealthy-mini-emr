@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..enums import NotificationType, Repeat
+from ..logging_setup import get_logger
 from ..models import Dosage, Medication, Patient, Prescription, PrescriptionException
 from ..schemas import (
     PrescriptionCreate,
@@ -16,11 +17,13 @@ from ..schemas import (
 from ..services import emit_notification
 
 router = APIRouter(prefix="/api", tags=["prescriptions"])
+log = get_logger("prescriptions")
 
 
 def _get_patient(db: Session, patient_id: int) -> Patient:
     patient = db.scalar(select(Patient).where(Patient.id == patient_id))
     if patient is None:
+        log.warning("Patient %s not found", patient_id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient not found")
     return patient
 
@@ -30,16 +33,19 @@ def _get_prescription(db: Session, prescription_id: int) -> Prescription:
         select(Prescription).where(Prescription.id == prescription_id)
     )
     if rx is None:
+        log.warning("Prescription %s not found", prescription_id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Prescription not found")
     return rx
 
 
 def _validate_lookups(db: Session, medication: str | None, dosage: str | None) -> None:
     if medication is not None and db.get(Medication, medication) is None:
+        log.warning("Rejected unknown medication: %s", medication)
         raise HTTPException(
             422, f"Unknown medication: {medication}"
         )
     if dosage is not None and db.get(Dosage, dosage) is None:
+        log.warning("Rejected unknown dosage: %s", dosage)
         raise HTTPException(
             422, f"Unknown dosage: {dosage}"
         )
@@ -75,6 +81,9 @@ def create_prescription(
     )
     db.commit()
     db.refresh(rx)
+    log.info(
+        "Prescribed %s %s (rx %s) for patient %s", rx.medication, rx.dosage, rx.id, patient_id
+    )
     return rx
 
 
@@ -92,6 +101,7 @@ def update_prescription(
     emit_notification(db, rx.patient_id, NotificationType.RX_UPDATED, msg, rx.id)
     db.commit()
     db.refresh(rx)
+    log.info("Updated prescription %s", rx.id)
     return rx
 
 
@@ -104,6 +114,7 @@ def upsert_refill_exception(
 ):
     rx = _get_prescription(db, prescription_id)
     if rx.refill_schedule == Repeat.NONE:
+        log.warning("Rejected refill edit on non-recurring prescription %s", rx.id)
         raise HTTPException(422, "Only recurring refills have occurrences to edit")
 
     existing = db.scalar(
@@ -125,6 +136,7 @@ def upsert_refill_exception(
     if body.cancelled:
         msg = f"Your {when} {rx.medication} refill was skipped."
         ntype = NotificationType.RX_CANCELLED
+        action = "skipped"
     else:
         parts = []
         if body.refill_on is not None:
@@ -134,9 +146,11 @@ def upsert_refill_exception(
         change = ", ".join(parts) if parts else "updated"
         msg = f"Your {when} {rx.medication} refill was {change}."
         ntype = NotificationType.RX_UPDATED
+        action = change
 
     emit_notification(db, rx.patient_id, ntype, msg, rx.id)
     db.commit()
+    log.info("Prescription %s: refill %s %s", rx.id, when, action)
 
 
 @router.delete(
@@ -154,9 +168,11 @@ def revert_refill_exception(
         )
     )
     if existing is None:
+        log.warning("Prescription %s: no override at %s to revert", rx.id, at)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No override for that refill")
     db.delete(existing)
     db.commit()
+    log.info("Prescription %s: refill %s reverted to series", rx.id, f"{at:%b %d, %Y}")
 
 
 @router.delete("/prescriptions/{prescription_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -171,3 +187,4 @@ def delete_prescription(prescription_id: int, db: Session = Depends(get_db)):
     )
     db.delete(rx)
     db.commit()
+    log.info("Discontinued prescription %s (patient %s)", prescription_id, rx.patient_id)

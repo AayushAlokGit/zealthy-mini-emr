@@ -2,12 +2,11 @@ from datetime import datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from ..auth import get_current_patient
 from ..db import get_db
+from ..logging_setup import get_logger
 from ..models import Appointment, Notification, Patient, Prescription
 from ..occurrences import expand_appointment, expand_prescription
 from ..recurrence import add_months
@@ -21,6 +20,7 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api/me", tags=["portal"])
+log = get_logger("portal")
 
 SUMMARY_DAYS = 7
 DRILLDOWN_MONTHS = 3
@@ -108,6 +108,10 @@ def summary(
         ).all()
     )
 
+    log.debug(
+        "Portal summary for patient %s: %d appts, %d refills, %d unread",
+        patient.id, len(appts), len(refills), unread_count,
+    )
     return PortalSummary(
         patient=patient,
         upcoming_appointments=appts,
@@ -165,6 +169,7 @@ def mark_read(
 ):
     note = db.get(Notification, notification_id)
     if note is None or note.patient_id != patient.id:
+        log.warning("Notification %s not found for patient %s", notification_id, patient.id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Notification not found")
     if note.read_at is None:
         note.read_at = datetime.now(timezone.utc)
@@ -186,3 +191,4 @@ def mark_all_read(
     for n in unread:
         n.read_at = now
     db.commit()
+    log.info("Patient %s marked %d notifications read", patient.id, len(unread))

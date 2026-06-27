@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .db import init_db
 from .logging_setup import get_logger, setup_logging
-from .routers import appointments, auth, lookups, me, patients, prescriptions
+from .routers import appointments, auth, lookups, patients, portal, prescriptions
 from .seed import seed_if_empty
 
 setup_logging()
@@ -82,7 +82,7 @@ app.include_router(patients.router)
 app.include_router(appointments.router)
 app.include_router(prescriptions.router)
 app.include_router(lookups.router)
-app.include_router(me.router)
+app.include_router(portal.router)
 
 
 @app.get("/api/health", tags=["health"])

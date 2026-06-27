@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..enums import NotificationType, Repeat
+from ..logging_setup import get_logger
 from ..models import Appointment, AppointmentException, Patient
 from ..schemas import (
     AppointmentCreate,
@@ -16,11 +17,13 @@ from ..schemas import (
 from ..services import emit_notification
 
 router = APIRouter(prefix="/api", tags=["appointments"])
+log = get_logger("appointments")
 
 
 def _get_patient(db: Session, patient_id: int) -> Patient:
     patient = db.scalar(select(Patient).where(Patient.id == patient_id))
     if patient is None:
+        log.warning("Patient %s not found", patient_id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient not found")
     return patient
 
@@ -30,6 +33,7 @@ def _get_appointment(db: Session, appointment_id: int) -> Appointment:
         select(Appointment).where(Appointment.id == appointment_id)
     )
     if appt is None:
+        log.warning("Appointment %s not found", appointment_id)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Appointment not found")
     return appt
 
@@ -61,6 +65,10 @@ def create_appointment(
     )
     db.commit()
     db.refresh(appt)
+    log.info(
+        "Scheduled appointment %s for patient %s with %s (repeat=%s)",
+        appt.id, patient_id, appt.provider, appt.repeat,
+    )
     return appt
 
 
@@ -82,6 +90,9 @@ def update_appointment(
     emit_notification(db, appt.patient_id, NotificationType.APPT_UPDATED, msg, appt.id)
     db.commit()
     db.refresh(appt)
+    log.info(
+        "Updated appointment %s (%s)", appt.id, "series ended" if ending else "fields"
+    )
     return appt
 
 
@@ -94,6 +105,7 @@ def upsert_exception(
 ):
     appt = _get_appointment(db, appointment_id)
     if appt.repeat == Repeat.NONE:
+        log.warning("Rejected occurrence edit on non-recurring appointment %s", appt.id)
         raise HTTPException(422, "Only recurring appointments have occurrences to edit")
 
     existing = db.scalar(
@@ -115,18 +127,22 @@ def upsert_exception(
     if body.cancelled:
         msg = f"Your {when} appointment with {appt.provider} was cancelled."
         ntype = NotificationType.APPT_CANCELLED
+        action = "cancelled"
     elif body.start_at is not None:
         msg = (
             f"Your {when} appointment with {existing.provider or appt.provider} "
             f"was moved to {body.start_at:%b %d, %Y at %I:%M %p} UTC."
         )
         ntype = NotificationType.APPT_UPDATED
+        action = "rescheduled"
     else:
         msg = f"Your {when} appointment was updated."
         ntype = NotificationType.APPT_UPDATED
+        action = "updated"
 
     emit_notification(db, appt.patient_id, ntype, msg, appt.id)
     db.commit()
+    log.info("Appointment %s: occurrence %s %s", appt.id, when, action)
 
 
 @router.delete(
@@ -144,9 +160,11 @@ def revert_exception(
         )
     )
     if existing is None:
+        log.warning("Appointment %s: no override at %s to revert", appt.id, at)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No override for that occurrence")
     db.delete(existing)
     db.commit()
+    log.info("Appointment %s: occurrence %s reverted to series", appt.id, f"{at:%b %d, %Y}")
 
 
 @router.delete("/appointments/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -161,3 +179,4 @@ def delete_appointment(appointment_id: int, db: Session = Depends(get_db)):
     )
     db.delete(appt)
     db.commit()
+    log.info("Deleted appointment %s (patient %s)", appointment_id, appt.patient_id)

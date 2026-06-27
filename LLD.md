@@ -67,7 +67,7 @@ zealthy/
 │  │  │  ├─ appointments.py
 │  │  │  ├─ prescriptions.py
 │  │  │  ├─ auth.py
-│  │  │  └─ me.py             # Portal: summary, schedule, notifications
+│  │  │  └─ portal.py         # Portal: summary, schedule, notifications
 │  │  └─ seed.py              # Idempotent seed from ../data.json
 │  ├─ tests/
 │  │  ├─ test_recurrence.py   # ⭐ unit tests for the engine
