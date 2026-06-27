@@ -10,9 +10,17 @@ and prescriptions in the EMR; patients log in to a portal to see what's coming u
 - **Mini-EMR** at `/admin` (no auth, per spec) — a searchable patient table and
   full CRUD over patients, appointments, and prescriptions.
 
-> **Live demo:** https://zealthy-mini-emr-one.vercel.app · **EMR:** https://zealthy-mini-emr-one.vercel.app/admin
-> **Demo login:** `mark@some-email-provider.net` / `Password123!`
->
+## Live demo
+
+| | URL |
+|---|---|
+| **Patient Portal** | https://zealthy-mini-emr-one.vercel.app |
+| **Mini-EMR (admin)** | https://zealthy-mini-emr-one.vercel.app/admin |
+| **API** | https://zealthy-api-hdaz.onrender.com/api/health |
+
+**Demo login:** `mark@some-email-provider.net` / `Password123!`
+(also `lisa@some-email-provider.net` / `Password123!`)
+
 > _The API is hosted on Render's free tier, which sleeps after ~15 min idle — the first
 > request may take ~30–60s to wake. Subsequent requests are fast._
 
