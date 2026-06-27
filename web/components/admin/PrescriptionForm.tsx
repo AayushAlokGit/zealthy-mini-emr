@@ -28,7 +28,6 @@ interface Props {
 
 export function PrescriptionForm({ existing, onSubmit, onDone }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
-  // Medication + dosage options come from the seeded lookup tables.
   const { data: medications } = useSWR<string[]>("/api/medications", fetcher);
   const { data: dosages } = useSWR<string[]>("/api/dosages", fetcher);
 

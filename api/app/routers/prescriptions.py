@@ -1,5 +1,3 @@
-"""Prescription CRUD. Medication and dosage are validated against the seeded
-lookup tables so the form can never persist an unknown value."""
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -110,7 +108,6 @@ def update_prescription(
 def upsert_refill_exception(
     prescription_id: int, body: RefillException, db: Session = Depends(get_db)
 ):
-    """Override a single refill: reschedule (refill_on/quantity) or skip it."""
     rx = _get_prescription(db, prescription_id)
     if rx.refill_schedule == Repeat.NONE:
         raise HTTPException(422, "Only recurring refills have occurrences to edit")
@@ -156,7 +153,6 @@ def upsert_refill_exception(
 def revert_refill_exception(
     prescription_id: int, at: date, db: Session = Depends(get_db)
 ):
-    """Revert a single refill back to the series schedule (delete its override)."""
     rx = _get_prescription(db, prescription_id)
     existing = db.scalar(
         select(PrescriptionException).where(

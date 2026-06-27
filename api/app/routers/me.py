@@ -1,5 +1,3 @@
-"""Patient Portal API. Every dated value is computed from the recurrence engine
-over a window — 7 days for the dashboard summary, 3 months for drill-downs."""
 from datetime import datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -55,7 +53,7 @@ def _expand_appointments(
     for a in appts:
         for occ in expand_appointment(a, window_start, window_end):
             if occ.cancelled:
-                continue  # patient view is read-only; cancelled occurrences are hidden
+                continue
             out.append(
                 AppointmentOccurrence(
                     appointment_id=a.id,
@@ -76,7 +74,7 @@ def _expand_refills(
     for r in rxs:
         for occ in expand_prescription(r, window_start, window_end):
             if occ.cancelled:
-                continue  # patient view is read-only; cancelled refills are hidden
+                continue
             out.append(
                 RefillOccurrence(
                     prescription_id=r.id,
@@ -98,7 +96,6 @@ def summary(
 ):
     now = datetime.now(timezone.utc)
     window_end = now + timedelta(days=SUMMARY_DAYS)
-    # Refills are date-based: include any refill from today through day 7.
     day_start = datetime.combine(now.date(), time.min, tzinfo=timezone.utc)
 
     appts = _expand_appointments(_active_appointments(db, patient.id), now, window_end)

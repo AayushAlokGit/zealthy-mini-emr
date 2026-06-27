@@ -21,7 +21,6 @@ const tabs = [
 export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  // /auth/me doubles as the auth gate: a 401 redirects to login.
   const { data: patient, error, isLoading } = useSWR<Patient>("/api/auth/me", fetcher, {
     shouldRetryOnError: false,
     onError: () => router.replace("/"),

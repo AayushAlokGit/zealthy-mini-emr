@@ -12,11 +12,6 @@ import { Field, Input } from "@/components/ui/form";
 
 const toLocalInput = (iso: string) => format(parseISO(iso), "yyyy-MM-dd'T'HH:mm");
 
-/**
- * Edit a single occurrence of a recurring appointment: reschedule it, cancel
- * just that occurrence, or revert it back to the series. Edits are stored as
- * exceptions keyed by the occurrence's original slot.
- */
 export function OccurrenceDialog({
   occurrence,
   onClose,
@@ -95,7 +90,6 @@ export function OccurrenceDialog({
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
-        {/* Revert is available whenever this occurrence diverges from the series. */}
         <div>
           {(occurrence.overridden || occurrence.cancelled) && (
             <Button variant="secondary" loading={busy === "revert"} onClick={revert}>

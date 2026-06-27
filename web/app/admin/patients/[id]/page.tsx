@@ -76,7 +76,6 @@ export default function PatientDetailPage() {
         <ArrowLeft className="h-4 w-4" /> Back to patients
       </Link>
 
-      {/* Patient header */}
       <Card className="mb-6 p-5">
         <div className="flex items-start justify-between">
           <div>
@@ -123,8 +122,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ------------------------------ Appointments ------------------------------ */
-
 function AppointmentsSection({
   patientId,
   swr,
@@ -139,8 +136,6 @@ function AppointmentsSection({
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingOcc, setEditingOcc] = useState<AdminOccurrence | null>(null);
 
-  // The calendar shows expanded occurrences (with per-occurrence overrides);
-  // only fetched while the calendar is open.
   const schedule = useSWR<AdminOccurrence[]>(
     showCalendar ? `/api/patients/${patientId}/schedule` : null,
     fetcher,
@@ -266,8 +261,6 @@ function AppointmentsSection({
   );
 }
 
-/* ------------------------------ Prescriptions ----------------------------- */
-
 function PrescriptionsSection({
   patientId,
   swr,
@@ -282,7 +275,6 @@ function PrescriptionsSection({
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingOcc, setEditingOcc] = useState<AdminRefillOccurrence | null>(null);
 
-  // The calendar shows expanded refill occurrences (with per-occurrence overrides).
   const schedule = useSWR<AdminRefillOccurrence[]>(
     showCalendar ? `/api/patients/${patientId}/refill-schedule` : null,
     fetcher,
@@ -400,8 +392,6 @@ function PrescriptionsSection({
     </Card>
   );
 }
-
-/* --------------------------------- Shared --------------------------------- */
 
 function SectionBar({
   title,

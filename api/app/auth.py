@@ -1,9 +1,3 @@
-"""Authentication: bcrypt password hashing + JWT session cookie.
-
-The EMR (/admin) is intentionally unauthenticated per the spec. The patient
-portal is gated by a signed JWT stored in an httpOnly cookie (safer than
-localStorage against XSS).
-"""
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -50,7 +44,6 @@ def _patient_id_from_token(token: str) -> int | None:
 def get_current_patient(
     request: Request, db: Session = Depends(get_db)
 ) -> Patient:
-    """FastAPI dependency that resolves the logged-in patient or 401s."""
     token = request.cookies.get(settings.cookie_name)
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"

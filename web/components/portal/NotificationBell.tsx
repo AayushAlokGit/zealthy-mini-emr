@@ -8,7 +8,7 @@ import { api, fetcher } from "@/lib/api";
 import type { NotificationList } from "@/lib/types";
 import { formatDateTime } from "@/lib/format";
 
-const POLL_MS = 30_000; // fetch-on-load + poll (no realtime push for now)
+const POLL_MS = 30_000;
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);

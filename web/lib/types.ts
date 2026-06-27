@@ -1,7 +1,3 @@
-// API types — mirror the FastAPI Pydantic schemas (camelCase via alias generator).
-// The backend also exposes an OpenAPI document at `${API}/openapi.json`; these
-// can be regenerated with `npm run gen:types` (see package.json).
-
 export type Repeat = "NONE" | "WEEKLY" | "MONTHLY";
 
 export type NotificationType =
@@ -64,8 +60,8 @@ export interface AppointmentOccurrence {
 
 export interface AdminOccurrence {
   appointmentId: number;
-  occurrenceStart: string; // original slot — identity for editing/reverting
-  occursAt: string; // effective time (after any reschedule)
+  occurrenceStart: string;
+  occursAt: string;
   provider: string;
   repeat: Repeat;
   cancelled: boolean;
@@ -91,8 +87,8 @@ export interface RefillOccurrence {
 
 export interface AdminRefillOccurrence {
   prescriptionId: number;
-  occurrenceDate: string; // original slot — identity for editing/reverting
-  refillOn: string; // effective date (after any reschedule)
+  occurrenceDate: string;
+  refillOn: string;
   medication: string;
   dosage: string;
   quantity: number;

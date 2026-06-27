@@ -1,4 +1,3 @@
-"""Database engine, session factory, and declarative base."""
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
@@ -6,7 +5,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import settings
 
-# check_same_thread is a SQLite-specific flag required for FastAPI's threadpool.
+# check_same_thread is SQLite-specific, required for FastAPI's threadpool.
 connect_args = (
     {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
 )
@@ -20,7 +19,6 @@ class Base(DeclarativeBase):
 
 
 def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency yielding a request-scoped session."""
     db = SessionLocal()
     try:
         yield db
@@ -29,7 +27,6 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Create all tables. Used in lieu of migrations for this SQLite demo."""
-    from . import models  # noqa: F401  (ensure models are registered)
+    from . import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

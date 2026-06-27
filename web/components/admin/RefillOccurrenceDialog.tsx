@@ -9,12 +9,6 @@ import { Modal } from "@/components/ui/Modal";
 import { Button, Badge } from "@/components/ui/primitives";
 import { Field, Input } from "@/components/ui/form";
 
-/**
- * Edit a single refill of a recurring prescription: reschedule the date, adjust
- * the quantity, skip just that refill, or revert it to the series. Stored as an
- * exception keyed by the refill's original date. (Medication/dosage stay
- * series-level — changing the drug for one refill is edited on the prescription.)
- */
 export function RefillOccurrenceDialog({
   occurrence,
   onClose,

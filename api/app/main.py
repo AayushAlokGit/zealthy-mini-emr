@@ -1,4 +1,3 @@
-"""FastAPI application factory."""
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -43,13 +42,8 @@ app.add_middleware(
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log every request with a correlation id, status, and latency.
-
-    The id is echoed in the ``X-Request-ID`` response header so a client error
-    can be traced to its server log line.
-    """
     if request.url.path == "/api/health":
-        return await call_next(request)  # skip noisy health-check polling
+        return await call_next(request)
 
     rid = uuid4().hex[:8]
     started = time.perf_counter()
@@ -64,7 +58,6 @@ async def log_requests(request: Request, call_next):
 
     elapsed = (time.perf_counter() - started) * 1000
     response.headers["X-Request-ID"] = rid
-    # 5xx -> ERROR, 4xx -> WARNING, else INFO.
     level = (
         logging.ERROR
         if response.status_code >= 500

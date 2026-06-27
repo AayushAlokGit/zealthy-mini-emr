@@ -1,10 +1,3 @@
-"""Bridge between the ORM and the pure recurrence engine.
-
-The system has two recurring series — appointments and prescription refills —
-which share the same rule shape and the same `expand_slots` engine. Each adds
-its own domain field on top (provider / quantity) and its own per-occurrence
-overrides, resolved here.
-"""
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 
@@ -14,7 +7,7 @@ from .recurrence import SlotOverride, expand_slots
 
 @dataclass(frozen=True)
 class ApptOccurrence:
-    occurrence_start: datetime  # original slot (identity)
+    occurrence_start: datetime  # original slot
     effective_start: datetime   # after any reschedule
     provider: str
     cancelled: bool
@@ -23,7 +16,7 @@ class ApptOccurrence:
 
 @dataclass(frozen=True)
 class RefillOccurrence:
-    occurrence_date: date  # original slot (identity)
+    occurrence_date: date  # original slot
     refill_on: date        # after any reschedule
     quantity: int
     cancelled: bool
@@ -31,7 +24,6 @@ class RefillOccurrence:
 
 
 def _midnight(d: date) -> datetime:
-    """Refills are date-based; lift to midnight UTC to flow through the engine."""
     return datetime.combine(d, time.min, tzinfo=timezone.utc)
 
 

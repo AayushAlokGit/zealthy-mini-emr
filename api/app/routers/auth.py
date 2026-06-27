@@ -1,4 +1,3 @@
-"""Patient portal authentication routes."""
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,7 +33,6 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
         )
     )
     if patient is None or not verify_password(body.password, patient.password_hash):
-        # Log failed attempts for security monitoring (email only, never the password).
         log.warning("Failed login for email=%s", body.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

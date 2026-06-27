@@ -1,9 +1,3 @@
-"""Pydantic request/response models — the authoritative validation layer.
-
-Responses use camelCase aliases so the JSON is idiomatic for the TypeScript
-frontend, while the Python code stays snake_case. ``populate_by_name`` means
-requests may use either form.
-"""
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -20,14 +14,10 @@ class CamelModel(BaseModel):
     )
 
 
-# --- Auth ----------------------------------------------------------------
-
 class LoginRequest(CamelModel):
     email: str
     password: str
 
-
-# --- Patients ------------------------------------------------------------
 
 class PatientCreate(CamelModel):
     name: str = Field(min_length=1, max_length=200)
@@ -55,7 +45,6 @@ class PatientOut(CamelModel):
 
 
 class PatientListItem(CamelModel):
-    """Row for the EMR patient table, with at-a-glance aggregates."""
     id: int
     name: str
     email: str
@@ -65,8 +54,6 @@ class PatientListItem(CamelModel):
     prescription_count: int
     next_appointment: datetime | None
 
-
-# --- Appointments --------------------------------------------------------
 
 class AppointmentCreate(CamelModel):
     provider: str = Field(min_length=1, max_length=200)
@@ -91,8 +78,6 @@ class AppointmentOut(CamelModel):
     until: date | None
     created_at: datetime
 
-
-# --- Prescriptions -------------------------------------------------------
 
 class PrescriptionCreate(CamelModel):
     medication: str
@@ -124,8 +109,6 @@ class PrescriptionOut(CamelModel):
     created_at: datetime
 
 
-# --- Occurrences (computed) ---------------------------------------------
-
 class AppointmentOccurrence(CamelModel):
     appointment_id: int
     provider: str
@@ -135,10 +118,9 @@ class AppointmentOccurrence(CamelModel):
 
 
 class AdminOccurrence(CamelModel):
-    """A single expanded occurrence for the EMR calendar, with edit identity."""
     appointment_id: int
-    occurrence_start: datetime  # original slot — the id used to edit/revert
-    occurs_at: datetime         # effective time (after any reschedule)
+    occurrence_start: datetime  # original slot, used as edit id
+    occurs_at: datetime         # after any reschedule
     provider: str
     repeat: Repeat
     cancelled: bool
@@ -146,7 +128,6 @@ class AdminOccurrence(CamelModel):
 
 
 class OccurrenceException(CamelModel):
-    """Upsert payload to override one occurrence of a recurring appointment."""
     occurrence_start: datetime
     cancelled: bool = False
     provider: str | None = Field(default=None, max_length=200)
@@ -164,10 +145,9 @@ class RefillOccurrence(CamelModel):
 
 
 class AdminRefillOccurrence(CamelModel):
-    """A single expanded refill for the EMR calendar, with edit identity."""
     prescription_id: int
-    occurrence_date: date  # original slot — the id used to edit/revert
-    refill_on: date        # effective date (after any reschedule)
+    occurrence_date: date  # original slot, used as edit id
+    refill_on: date        # after any reschedule
     medication: str
     dosage: str
     quantity: int
@@ -177,14 +157,11 @@ class AdminRefillOccurrence(CamelModel):
 
 
 class RefillException(CamelModel):
-    """Upsert payload to override one refill of a recurring prescription."""
     occurrence_date: date
     cancelled: bool = False
     refill_on: date | None = None
     quantity: int | None = Field(default=None, gt=0)
 
-
-# --- Portal summary ------------------------------------------------------
 
 class PortalSummary(CamelModel):
     patient: PatientOut
@@ -192,8 +169,6 @@ class PortalSummary(CamelModel):
     upcoming_refills: list[RefillOccurrence]
     unread_notifications: int
 
-
-# --- Notifications -------------------------------------------------------
 
 class NotificationOut(CamelModel):
     id: int

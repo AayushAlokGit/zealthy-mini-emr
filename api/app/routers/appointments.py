@@ -1,5 +1,3 @@
-"""Appointment CRUD. Recurring appointments are stored as rules; "ending" a
-series sets ``until`` rather than deleting history."""
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -100,7 +98,6 @@ def update_appointment(
 def upsert_exception(
     appointment_id: int, body: OccurrenceException, db: Session = Depends(get_db)
 ):
-    """Override a single occurrence: reschedule (start_at/provider) or cancel it."""
     appt = _get_appointment(db, appointment_id)
     if appt.repeat == Repeat.NONE:
         raise HTTPException(422, "Only recurring appointments have occurrences to edit")
@@ -146,7 +143,6 @@ def upsert_exception(
 def revert_exception(
     appointment_id: int, at: datetime, db: Session = Depends(get_db)
 ):
-    """Revert a single occurrence back to the series rule (delete its override)."""
     appt = _get_appointment(db, appointment_id)
     existing = db.scalar(
         select(AppointmentException).where(

@@ -1,7 +1,3 @@
-"""EMR patient management: list (with at-a-glance aggregates), create, read, update.
-
-No delete — the spec calls for CRU on patients.
-"""
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -46,7 +42,6 @@ def list_patients(db: Session = Depends(get_db)):
         appts = [a for a in p.appointments if a.deleted_at is None]
         rx = [r for r in p.prescriptions if r.deleted_at is None]
 
-        # Earliest upcoming occurrence across all of the patient's appointments.
         next_appt = None
         for a in appts:
             nxt = next_occurrence(a.start_at, a.repeat, a.until, now)
@@ -137,8 +132,6 @@ def patient_schedule(
     months: int = Query(default=3, ge=1, le=12),
     db: Session = Depends(get_db),
 ):
-    """Expanded appointment occurrences for the EMR calendar, including
-    per-occurrence overrides (so each is editable/revertable)."""
     _get_active_patient(db, patient_id)
     appts = db.scalars(
         select(Appointment)
@@ -172,8 +165,6 @@ def patient_refill_schedule(
     months: int = Query(default=3, ge=1, le=12),
     db: Session = Depends(get_db),
 ):
-    """Expanded refill occurrences for the EMR calendar, including per-occurrence
-    overrides (so each is editable/revertable)."""
     _get_active_patient(db, patient_id)
     rxs = db.scalars(
         select(Prescription)

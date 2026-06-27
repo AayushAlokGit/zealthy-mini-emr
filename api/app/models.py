@@ -1,9 +1,3 @@
-"""SQLAlchemy ORM models.
-
-Recurring appointments and prescription refills are stored as *rules*
-(a start + cadence + optional end), never as materialized future rows.
-Concrete occurrences are computed on demand by ``recurrence.expand_occurrences``.
-"""
 from datetime import date, datetime, timezone
 
 from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -49,8 +43,7 @@ class Appointment(Base):
     provider: Mapped[str] = mapped_column(String(200))
     start_at: Mapped[datetime] = mapped_column(UTCDateTime)
     repeat: Mapped[Repeat] = mapped_column(String(16), default=Repeat.NONE)
-    # Inclusive last date a recurrence may occur; None = open-ended.
-    until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    until: Mapped[date | None] = mapped_column(Date, nullable=True)  # None = open-ended
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
@@ -61,12 +54,6 @@ class Appointment(Base):
 
 
 class AppointmentException(Base):
-    """A per-occurrence override of a recurring appointment (iCalendar RECURRENCE-ID).
-
-    Identified by ``occurrence_start`` — the *original* datetime of the slot it
-    overrides. ``cancelled`` removes that one occurrence; ``provider``/``start_at``
-    reschedule it. Deleting the row reverts the occurrence to the series rule.
-    """
     __tablename__ = "appointment_exceptions"
     __table_args__ = (
         UniqueConstraint("appointment_id", "occurrence_start", name="uq_exception_slot"),
@@ -104,12 +91,6 @@ class Prescription(Base):
 
 
 class PrescriptionException(Base):
-    """A per-occurrence override of a recurring refill (mirrors AppointmentException).
-
-    Identified by ``occurrence_date`` — the *original* date of the refill it
-    overrides. ``cancelled`` skips that refill; ``refill_on``/``quantity``
-    reschedule or adjust it. Deleting the row reverts it to the series.
-    """
     __tablename__ = "prescription_exceptions"
     __table_args__ = (
         UniqueConstraint("prescription_id", "occurrence_date", name="uq_rx_exception_slot"),
@@ -141,7 +122,6 @@ class Notification(Base):
 
 
 class Medication(Base):
-    """Lookup table seeded from data.json; powers the prescription form."""
     __tablename__ = "medications"
 
     name: Mapped[str] = mapped_column(String(120), primary_key=True)
@@ -154,7 +134,6 @@ class Dosage(Base):
 
 
 class AuditLog(Base):
-    """Append-only record of every mutation — a healthcare-grade habit."""
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(primary_key=True)

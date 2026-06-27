@@ -1,6 +1,3 @@
-// Zod schemas power client-side form validation (instant inline errors). The
-// backend's Pydantic models remain the authoritative gate — these mirror them
-// for UX. `z.infer` gives us the form's TypeScript type for free.
 import { z } from "zod";
 
 const repeat = z.enum(["NONE", "WEEKLY", "MONTHLY"]);
@@ -14,7 +11,6 @@ export const patientSchema = z.object({
 });
 export type PatientForm = z.infer<typeof patientSchema>;
 
-// On edit, password is optional (blank = unchanged).
 export const patientEditSchema = patientSchema.extend({
   password: z.string().min(6, "At least 6 characters").or(z.literal("")),
 });

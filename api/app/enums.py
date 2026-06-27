@@ -1,9 +1,7 @@
-"""Shared enums used across models, schemas, and the recurrence engine."""
 from enum import Enum
 
 
 class Repeat(str, Enum):
-    """Recurrence cadence for appointments and prescription refills."""
     NONE = "NONE"
     WEEKLY = "WEEKLY"
     MONTHLY = "MONTHLY"

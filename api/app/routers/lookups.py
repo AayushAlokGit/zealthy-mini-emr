@@ -1,4 +1,3 @@
-"""Reference data for the prescription form (seeded from data.json)."""
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +15,5 @@ def list_medications(db: Session = Depends(get_db)):
 
 @router.get("/dosages", response_model=list[str])
 def list_dosages(db: Session = Depends(get_db)):
-    # Sort numerically by the mg value rather than lexicographically.
-    values = list(db.scalars(select(Dosage.value)))
+    values = list(db.scalars(select(Dosage.value)))  # sort numerically by mg
     return sorted(values, key=lambda v: int("".join(c for c in v if c.isdigit()) or 0))

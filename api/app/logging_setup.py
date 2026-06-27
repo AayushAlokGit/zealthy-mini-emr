@@ -1,10 +1,3 @@
-"""Centralized logging configuration.
-
-Configures a single ``zealthy`` logger namespace with a consistent format,
-independent of uvicorn's own access logs. Every module gets a child logger via
-``get_logger("<area>")`` so log lines are grouped (zealthy.request,
-zealthy.auth, zealthy.audit, …) and the whole app's verbosity is one env var.
-"""
 import logging
 
 from .config import settings
@@ -13,7 +6,6 @@ _configured = False
 
 
 def setup_logging() -> None:
-    """Idempotently configure the ``zealthy`` logger from settings.log_level."""
     global _configured
     if _configured:
         return
@@ -30,7 +22,7 @@ def setup_logging() -> None:
     root = logging.getLogger("zealthy")
     root.setLevel(level)
     root.handlers = [handler]
-    root.propagate = False  # don't double-log through uvicorn's root handler
+    root.propagate = False
     _configured = True
 
 

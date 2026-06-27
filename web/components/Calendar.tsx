@@ -17,13 +17,11 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "./ui/cn";
 
 export interface CalendarEvent {
-  /** A Date in local time representing when the event occurs. */
   date: Date;
   title: string;
   subtitle?: string;
   color?: "teal" | "amber";
   cancelled?: boolean;
-  /** Arbitrary data passed back to onSelectEvent (e.g. the occurrence record). */
   payload?: unknown;
 }
 
@@ -35,7 +33,6 @@ export function Calendar({
   onSelectEvent,
 }: {
   events: CalendarEvent[];
-  /** When provided, side-panel events become clickable (e.g. to edit them). */
   onSelectEvent?: (event: CalendarEvent) => void;
 }) {
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));

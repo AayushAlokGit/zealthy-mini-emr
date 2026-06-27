@@ -1,8 +1,3 @@
-"""Idempotent seed from the repo-root data.json.
-
-Running it repeatedly will not duplicate rows: patients are matched by email,
-lookups by primary key. Run with:  python -m app.seed
-"""
 import json
 from datetime import datetime
 from pathlib import Path
@@ -30,7 +25,6 @@ def seed() -> None:
     data = json.loads(DATA_PATH.read_text(encoding="utf-8"))
 
     with SessionLocal() as db:
-        # Lookup tables.
         for name in data.get("medications", []):
             if db.get(Medication, name) is None:
                 db.add(Medication(name=name))
@@ -50,7 +44,6 @@ def seed() -> None:
                 db.add(patient)
                 db.flush()
 
-            # Only seed nested records the first time a patient is created.
             if not patient.appointments:
                 for a in u.get("appointments", []):
                     db.add(
@@ -79,7 +72,6 @@ def seed() -> None:
 
 
 def seed_if_empty() -> None:
-    """Seed only when no patients exist yet (safe to call on every startup)."""
     init_db()
     with SessionLocal() as db:
         if db.scalar(select(Patient)) is not None:

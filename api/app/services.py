@@ -1,8 +1,3 @@
-"""Cross-cutting service helpers: notifications and audit logging.
-
-Centralized so every mutation route emits consistently — no endpoint can
-forget to record an audit entry or notify the patient.
-"""
 from sqlalchemy.orm import Session
 
 from .enums import NotificationType
@@ -19,7 +14,6 @@ def emit_notification(
     message: str,
     related_id: int | None = None,
 ) -> Notification:
-    """Create an in-app notification for a patient (caller commits)."""
     note = Notification(
         patient_id=patient_id,
         type=type,
@@ -38,11 +32,6 @@ def record_audit(
     action: str,
     summary: str,
 ) -> AuditLog:
-    """Append an audit-log entry (caller commits).
-
-    Also emits an operational log line — since every mutation routes through
-    here, this gives full mutation observability for free.
-    """
     entry = AuditLog(
         entity=entity,
         entity_id=entity_id,

@@ -13,7 +13,7 @@ import { Field, Input, Select } from "@/components/ui/form";
 
 export interface AppointmentPayload {
   provider: string;
-  startAt: string; // UTC ISO
+  startAt: string;
   repeat: Values["repeat"];
   until: string | null;
 }
@@ -52,7 +52,6 @@ export function AppointmentForm({ existing, onSubmit, onDone }: Props) {
     try {
       await onSubmit({
         provider: values.provider,
-        // datetime-local is local wall-clock → convert to UTC ISO for the API.
         startAt: new Date(values.startAt).toISOString(),
         repeat: values.repeat,
         until: values.repeat !== "NONE" && values.until ? values.until : null,

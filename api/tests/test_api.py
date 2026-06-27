@@ -1,4 +1,3 @@
-"""End-to-end API tests covering the core EMR + portal flows."""
 from datetime import datetime, timedelta, timezone
 
 
@@ -42,7 +41,6 @@ def test_health(client):
 
 
 def test_create_patient_and_login(client):
-    """A patient created via the EMR can log in to the portal (key spec rule)."""
     res = _create_patient(client)
     assert res.status_code == 201
     pid = res.json()["id"]
@@ -126,8 +124,6 @@ def test_portal_requires_auth(client):
     assert client.get("/api/me/summary").status_code == 401
 
 
-# --- single-occurrence editing -------------------------------------------
-
 def test_reschedule_single_occurrence(client):
     pid = _create_patient(client).json()["id"]
     appt = _recurring_appointment(client, pid)
@@ -157,11 +153,9 @@ def test_cancel_single_occurrence_hidden_from_portal(client):
         json={"occurrenceStart": slot, "cancelled": True},
     )
 
-    # EMR still shows it (flagged cancelled) so an admin can revert it...
     emr = {o["occurrenceStart"]: o for o in client.get(f"/api/patients/{pid}/schedule").json()}
     assert emr[slot]["cancelled"] is True
 
-    # ...but the patient-facing schedule omits it entirely.
     client.post("/api/auth/login", json={"email": "alice@example.com", "password": "secret1"})
     portal = client.get("/api/me/appointments").json()
     assert all(o["occursAt"] != emr[slot]["occursAt"] for o in portal)
@@ -195,8 +189,6 @@ def test_cannot_edit_occurrence_of_one_time_appointment(client):
     )
     assert res.status_code == 422
 
-
-# --- single-refill editing -----------------------------------------------
 
 def test_reschedule_single_refill(client):
     pid = _create_patient(client).json()["id"]
