@@ -152,6 +152,7 @@ function SectionHeader({
       <div className="flex items-center gap-2 text-slate-700">
         {icon}
         <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="text-xs font-normal text-slate-400">(next 7 days)</span>
         <Badge>{count}</Badge>
       </div>
       <Link href={href} className="flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline">
