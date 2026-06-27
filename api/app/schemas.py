@@ -160,6 +160,28 @@ class RefillOccurrence(CamelModel):
     quantity: int
     refill_on: date
     refill_schedule: Repeat
+    overridden: bool = False
+
+
+class AdminRefillOccurrence(CamelModel):
+    """A single expanded refill for the EMR calendar, with edit identity."""
+    prescription_id: int
+    occurrence_date: date  # original slot — the id used to edit/revert
+    refill_on: date        # effective date (after any reschedule)
+    medication: str
+    dosage: str
+    quantity: int
+    refill_schedule: Repeat
+    cancelled: bool
+    overridden: bool
+
+
+class RefillException(CamelModel):
+    """Upsert payload to override one refill of a recurring prescription."""
+    occurrence_date: date
+    cancelled: bool = False
+    refill_on: date | None = None
+    quantity: int | None = Field(default=None, gt=0)
 
 
 # --- Portal summary ------------------------------------------------------

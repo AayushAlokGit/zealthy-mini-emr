@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session, selectinload
 from ..auth import hash_password
 from ..db import get_db
 from ..models import Appointment, Patient, Prescription
-from ..occurrences import expand_appointment
+from ..occurrences import expand_appointment, expand_prescription
 from ..recurrence import add_months, next_occurrence
 from ..schemas import (
     AdminOccurrence,
+    AdminRefillOccurrence,
     AppointmentOut,
     PatientCreate,
     PatientListItem,
@@ -162,6 +163,43 @@ def patient_schedule(
                 )
             )
     rows.sort(key=lambda r: r.occurs_at)
+    return rows
+
+
+@router.get("/{patient_id}/refill-schedule", response_model=list[AdminRefillOccurrence])
+def patient_refill_schedule(
+    patient_id: int,
+    months: int = Query(default=3, ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """Expanded refill occurrences for the EMR calendar, including per-occurrence
+    overrides (so each is editable/revertable)."""
+    _get_active_patient(db, patient_id)
+    rxs = db.scalars(
+        select(Prescription)
+        .where(Prescription.patient_id == patient_id, Prescription.deleted_at.is_(None))
+        .options(selectinload(Prescription.exceptions))
+    ).all()
+
+    now = datetime.now(timezone.utc)
+    window_end = add_months(now, months)
+    rows: list[AdminRefillOccurrence] = []
+    for r in rxs:
+        for occ in expand_prescription(r, now, window_end):
+            rows.append(
+                AdminRefillOccurrence(
+                    prescription_id=r.id,
+                    occurrence_date=occ.occurrence_date,
+                    refill_on=occ.refill_on,
+                    medication=r.medication,
+                    dosage=r.dosage,
+                    quantity=occ.quantity,
+                    refill_schedule=r.refill_schedule,
+                    cancelled=occ.cancelled,
+                    overridden=occ.overridden,
+                )
+            )
+    rows.sort(key=lambda r: r.refill_on)
     return rows
 
 

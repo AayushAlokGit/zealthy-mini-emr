@@ -98,6 +98,32 @@ class Prescription(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     patient: Mapped["Patient"] = relationship(back_populates="prescriptions")
+    exceptions: Mapped[list["PrescriptionException"]] = relationship(
+        back_populates="prescription", cascade="all, delete-orphan"
+    )
+
+
+class PrescriptionException(Base):
+    """A per-occurrence override of a recurring refill (mirrors AppointmentException).
+
+    Identified by ``occurrence_date`` — the *original* date of the refill it
+    overrides. ``cancelled`` skips that refill; ``refill_on``/``quantity``
+    reschedule or adjust it. Deleting the row reverts it to the series.
+    """
+    __tablename__ = "prescription_exceptions"
+    __table_args__ = (
+        UniqueConstraint("prescription_id", "occurrence_date", name="uq_rx_exception_slot"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    prescription_id: Mapped[int] = mapped_column(ForeignKey("prescriptions.id"), index=True)
+    occurrence_date: Mapped[date] = mapped_column(Date)
+    cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
+    refill_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    prescription: Mapped["Prescription"] = relationship(back_populates="exceptions")
 
 
 class Notification(Base):

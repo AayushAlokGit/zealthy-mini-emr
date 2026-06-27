@@ -5,10 +5,10 @@ import pytest
 
 from app.enums import Repeat
 from app.recurrence import (
-    ExceptionData,
+    SlotOverride,
     add_months,
     expand_occurrences,
-    expand_with_exceptions,
+    expand_slots,
     next_occurrence,
 )
 
@@ -140,50 +140,44 @@ def test_reversed_window_is_empty():
     assert expand_occurrences(start, Repeat.WEEKLY, None, dt(2026, 5, 1), dt(2026, 4, 1)) == []
 
 
-# --- expand_with_exceptions ---------------------------------------------
+# --- expand_slots (shared by appointments + refills) --------------------
 
-def test_exceptions_passthrough_when_none():
+def test_slots_passthrough_when_no_overrides():
     start = dt(2026, 4, 1, 9, 0)
-    out = expand_with_exceptions(
-        start, Repeat.WEEKLY, None, "Dr A", {}, dt(2026, 4, 1), dt(2026, 4, 22)
-    )
-    assert [o.effective_start for o in out] == [
+    out = expand_slots(start, Repeat.WEEKLY, None, {}, dt(2026, 4, 1), dt(2026, 4, 22))
+    assert [s.effective for s in out] == [
         dt(2026, 4, 1, 9, 0),
         dt(2026, 4, 8, 9, 0),
         dt(2026, 4, 15, 9, 0),
     ]
-    assert all(not o.overridden and not o.cancelled for o in out)
+    assert all(not s.overridden and not s.cancelled for s in out)
 
 
-def test_exception_reschedules_single_occurrence():
+def test_slot_reschedules_single_occurrence():
     start = dt(2026, 4, 1, 9, 0)
-    moved = {dt(2026, 4, 8, 9, 0): ExceptionData(start_at=dt(2026, 4, 9, 14, 0))}
-    out = expand_with_exceptions(
-        start, Repeat.WEEKLY, None, "Dr A", moved, dt(2026, 4, 1), dt(2026, 4, 16)
-    )
-    by_slot = {o.occurrence_start: o for o in out}
+    moved = {dt(2026, 4, 8, 9, 0): SlotOverride(moved_to=dt(2026, 4, 9, 14, 0))}
+    out = expand_slots(start, Repeat.WEEKLY, None, moved, dt(2026, 4, 1), dt(2026, 4, 16))
+    by_slot = {s.original: s for s in out}
     # The Apr 8 slot now lands on Apr 9 14:00, flagged overridden; others untouched.
-    assert by_slot[dt(2026, 4, 8, 9, 0)].effective_start == dt(2026, 4, 9, 14, 0)
+    assert by_slot[dt(2026, 4, 8, 9, 0)].effective == dt(2026, 4, 9, 14, 0)
     assert by_slot[dt(2026, 4, 8, 9, 0)].overridden is True
     assert by_slot[dt(2026, 4, 1, 9, 0)].overridden is False
 
 
-def test_exception_overrides_provider():
+def test_slot_marks_overridden_even_without_move():
+    # An override that changes only a domain field (provider/quantity) still
+    # flags the slot overridden so the caller applies the new value.
     start = dt(2026, 4, 1, 9, 0)
-    ex = {dt(2026, 4, 1, 9, 0): ExceptionData(provider="Dr Sub")}
-    out = expand_with_exceptions(
-        start, Repeat.WEEKLY, None, "Dr A", ex, dt(2026, 4, 1), dt(2026, 4, 2)
-    )
-    assert out[0].provider == "Dr Sub"
+    ex = {dt(2026, 4, 1, 9, 0): SlotOverride()}
+    out = expand_slots(start, Repeat.WEEKLY, None, ex, dt(2026, 4, 1), dt(2026, 4, 2))
+    assert out[0].overridden is True and out[0].effective == dt(2026, 4, 1, 9, 0)
 
 
-def test_exception_cancels_single_occurrence():
+def test_slot_cancels_single_occurrence():
     start = dt(2026, 4, 1, 9, 0)
-    ex = {dt(2026, 4, 8, 9, 0): ExceptionData(cancelled=True)}
-    out = expand_with_exceptions(
-        start, Repeat.WEEKLY, None, "Dr A", ex, dt(2026, 4, 1), dt(2026, 4, 16)
-    )
-    cancelled = [o for o in out if o.cancelled]
-    assert len(cancelled) == 1 and cancelled[0].occurrence_start == dt(2026, 4, 8, 9, 0)
+    ex = {dt(2026, 4, 8, 9, 0): SlotOverride(cancelled=True)}
+    out = expand_slots(start, Repeat.WEEKLY, None, ex, dt(2026, 4, 1), dt(2026, 4, 16))
+    cancelled = [s for s in out if s.cancelled]
+    assert len(cancelled) == 1 and cancelled[0].original == dt(2026, 4, 8, 9, 0)
     # The non-cancelled slots remain (a read-only consumer would filter the cancelled one).
-    assert sum(1 for o in out if not o.cancelled) == 2
+    assert sum(1 for s in out if not s.cancelled) == 2

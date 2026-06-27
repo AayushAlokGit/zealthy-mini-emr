@@ -107,7 +107,10 @@ function Prescriptions() {
                   </p>
                   <p className="text-xs text-slate-500">Refill on {formatDate(r.refillOn)}</p>
                 </div>
-                <Badge color="amber">Qty {r.quantity}</Badge>
+                <div className="flex items-center gap-2">
+                  {r.overridden && <Badge color="teal">Rescheduled</Badge>}
+                  <Badge color="amber">Qty {r.quantity}</Badge>
+                </div>
               </li>
             ))}
           </ul>

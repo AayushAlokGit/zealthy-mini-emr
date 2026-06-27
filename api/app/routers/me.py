@@ -11,8 +11,8 @@ from sqlalchemy.orm import selectinload
 from ..auth import get_current_patient
 from ..db import get_db
 from ..models import Appointment, Notification, Patient, Prescription
-from ..occurrences import expand_appointment
-from ..recurrence import add_months, expand_occurrences
+from ..occurrences import expand_appointment, expand_prescription
+from ..recurrence import add_months
 from ..schemas import (
     AppointmentOccurrence,
     NotificationList,
@@ -41,9 +41,9 @@ def _active_appointments(db: Session, patient_id: int) -> list[Appointment]:
 def _active_prescriptions(db: Session, patient_id: int) -> list[Prescription]:
     return list(
         db.scalars(
-            select(Prescription).where(
-                Prescription.patient_id == patient_id, Prescription.deleted_at.is_(None)
-            )
+            select(Prescription)
+            .where(Prescription.patient_id == patient_id, Prescription.deleted_at.is_(None))
+            .options(selectinload(Prescription.exceptions))
         )
     )
 
@@ -74,17 +74,18 @@ def _expand_refills(
 ) -> list[RefillOccurrence]:
     out: list[RefillOccurrence] = []
     for r in rxs:
-        # Treat the refill date as midnight UTC so it flows through the same engine.
-        start_dt = datetime.combine(r.refill_on, time.min, tzinfo=timezone.utc)
-        for occ in expand_occurrences(start_dt, r.refill_schedule, r.until, window_start, window_end):
+        for occ in expand_prescription(r, window_start, window_end):
+            if occ.cancelled:
+                continue  # patient view is read-only; cancelled refills are hidden
             out.append(
                 RefillOccurrence(
                     prescription_id=r.id,
                     medication=r.medication,
                     dosage=r.dosage,
-                    quantity=r.quantity,
-                    refill_on=occ.date(),
+                    quantity=occ.quantity,
+                    refill_on=occ.refill_on,
                     refill_schedule=r.refill_schedule,
+                    overridden=occ.overridden,
                 )
             )
     out.sort(key=lambda o: o.refill_on)

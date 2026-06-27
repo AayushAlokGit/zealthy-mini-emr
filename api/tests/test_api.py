@@ -13,10 +13,27 @@ def _future(days: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(days=days)).replace(microsecond=0).isoformat()
 
 
+def _future_date(days: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=days)).date().isoformat()
+
+
 def _recurring_appointment(client, pid):
     return client.post(
         f"/api/patients/{pid}/appointments",
         json={"provider": "Dr Series", "startAt": _future(1), "repeat": "WEEKLY"},
+    ).json()
+
+
+def _recurring_prescription(client, pid):
+    return client.post(
+        f"/api/patients/{pid}/prescriptions",
+        json={
+            "medication": "Prozac",
+            "dosage": "10mg",
+            "quantity": 1,
+            "refillOn": _future_date(1),
+            "refillSchedule": "MONTHLY",
+        },
     ).json()
 
 
@@ -175,5 +192,78 @@ def test_cannot_edit_occurrence_of_one_time_appointment(client):
     res = client.put(
         f"/api/appointments/{appt['id']}/exceptions",
         json={"occurrenceStart": _future(1), "cancelled": True},
+    )
+    assert res.status_code == 422
+
+
+# --- single-refill editing -----------------------------------------------
+
+def test_reschedule_single_refill(client):
+    pid = _create_patient(client).json()["id"]
+    rx = _recurring_prescription(client, pid)
+    slot = client.get(f"/api/patients/{pid}/refill-schedule").json()[0]["occurrenceDate"]
+    moved = _future_date(3)
+
+    res = client.put(
+        f"/api/prescriptions/{rx['id']}/exceptions",
+        json={"occurrenceDate": slot, "refillOn": moved, "quantity": 5},
+    )
+    assert res.status_code == 204
+
+    after = {o["occurrenceDate"]: o for o in client.get(f"/api/patients/{pid}/refill-schedule").json()}
+    assert after[slot]["overridden"] is True
+    assert after[slot]["refillOn"] == moved
+    assert after[slot]["quantity"] == 5
+
+
+def test_cancel_single_refill_hidden_from_portal(client):
+    pid = _create_patient(client).json()["id"]
+    rx = _recurring_prescription(client, pid)
+    slot = client.get(f"/api/patients/{pid}/refill-schedule").json()[0]["occurrenceDate"]
+
+    client.put(
+        f"/api/prescriptions/{rx['id']}/exceptions",
+        json={"occurrenceDate": slot, "cancelled": True},
+    )
+
+    emr = {o["occurrenceDate"]: o for o in client.get(f"/api/patients/{pid}/refill-schedule").json()}
+    assert emr[slot]["cancelled"] is True
+
+    client.post("/api/auth/login", json={"email": "alice@example.com", "password": "secret1"})
+    portal = client.get("/api/me/refills").json()
+    assert all(o["refillOn"] != slot for o in portal)
+
+
+def test_revert_single_refill(client):
+    pid = _create_patient(client).json()["id"]
+    rx = _recurring_prescription(client, pid)
+    slot = client.get(f"/api/patients/{pid}/refill-schedule").json()[0]["occurrenceDate"]
+    client.put(
+        f"/api/prescriptions/{rx['id']}/exceptions",
+        json={"occurrenceDate": slot, "quantity": 9},
+    )
+
+    res = client.request("DELETE", f"/api/prescriptions/{rx['id']}/exceptions", params={"at": slot})
+    assert res.status_code == 204
+    after = {o["occurrenceDate"]: o for o in client.get(f"/api/patients/{pid}/refill-schedule").json()}
+    assert after[slot]["overridden"] is False
+    assert after[slot]["quantity"] == 1
+
+
+def test_cannot_edit_refill_of_one_time_prescription(client):
+    pid = _create_patient(client).json()["id"]
+    rx = client.post(
+        f"/api/patients/{pid}/prescriptions",
+        json={
+            "medication": "Prozac",
+            "dosage": "10mg",
+            "quantity": 1,
+            "refillOn": _future_date(1),
+            "refillSchedule": "NONE",
+        },
+    ).json()
+    res = client.put(
+        f"/api/prescriptions/{rx['id']}/exceptions",
+        json={"occurrenceDate": _future_date(1), "cancelled": True},
     )
     assert res.status_code == 422

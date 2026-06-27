@@ -62,11 +62,12 @@ It's pure and **unit-tested** (month-boundary rollover, end-of-month clamping,
 
 ### Other deliberate touches
 
-- **Single-occurrence editing** — one occurrence of a recurring appointment can be
-  rescheduled, cancelled, or reverted without touching the rest of the series. Stored
-  as an *exception* keyed by the occurrence's original slot (the iCalendar
-  RECURRENCE-ID / EXDATE pattern), applied by a second pure, tested function. Edit it
-  from the EMR calendar; the patient sees a "Rescheduled" badge + a notification.
+- **Single-occurrence editing** — one occurrence of a recurring series (an appointment
+  *or* a prescription refill) can be rescheduled, cancelled, or reverted without
+  touching the rest. Stored as an *exception* keyed by the occurrence's original slot
+  (the iCalendar RECURRENCE-ID / EXDATE pattern). Both series share one generic,
+  unit-tested `expand_slots` engine — each layers its own field (provider / quantity)
+  on top. Edit from the EMR calendars; the patient sees a "Rescheduled" badge + a notification.
 - **Timezone correctness** — a custom `UTCDateTime` type normalises everything to
   UTC at the DB boundary (SQLite is tz-naive), so "next 7 days" is correct across the
   `-07:00` offsets in the seed data.
@@ -111,7 +112,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ### Tests
 
 ```bash
-cd api && pytest          # 33 tests: recurrence engine + API flows
+cd api && pytest          # 37 tests: recurrence engine + API flows
 cd web && npm run build   # typecheck + production build
 ```
 

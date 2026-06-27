@@ -8,7 +8,13 @@ import { parseISO, format } from "date-fns";
 import { ArrowLeft, Pencil, Plus, Trash2, CalendarOff, CalendarDays } from "lucide-react";
 
 import { api, fetcher } from "@/lib/api";
-import type { Patient, Appointment, Prescription, AdminOccurrence } from "@/lib/types";
+import type {
+  Patient,
+  Appointment,
+  Prescription,
+  AdminOccurrence,
+  AdminRefillOccurrence,
+} from "@/lib/types";
 import type { PatientForm as PatientValues } from "@/lib/schemas";
 import { formatDate, formatDateTime, formatTime, repeatLabel } from "@/lib/format";
 import { AdminHeader } from "@/components/admin/AdminHeader";
@@ -16,6 +22,7 @@ import { PatientForm } from "@/components/admin/PatientForm";
 import { AppointmentForm, type AppointmentPayload } from "@/components/admin/AppointmentForm";
 import { PrescriptionForm, type PrescriptionPayload } from "@/components/admin/PrescriptionForm";
 import { OccurrenceDialog } from "@/components/admin/OccurrenceDialog";
+import { RefillOccurrenceDialog } from "@/components/admin/RefillOccurrenceDialog";
 import { Calendar, type CalendarEvent } from "@/components/Calendar";
 import { Card, Badge, Button } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/Modal";
@@ -272,22 +279,45 @@ function PrescriptionsSection({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Prescription | null>(null);
   const [deleting, setDeleting] = useState<Prescription | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [editingOcc, setEditingOcc] = useState<AdminRefillOccurrence | null>(null);
+
+  // The calendar shows expanded refill occurrences (with per-occurrence overrides).
+  const schedule = useSWR<AdminRefillOccurrence[]>(
+    showCalendar ? `/api/patients/${patientId}/refill-schedule` : null,
+    fetcher,
+  );
+
+  function refreshAll() {
+    mutate();
+    schedule.mutate();
+  }
 
   async function create(payload: PrescriptionPayload) {
     await api.post(`/api/patients/${patientId}/prescriptions`, payload);
-    mutate();
+    refreshAll();
   }
   async function update(payload: PrescriptionPayload) {
     if (!editing) return;
     await api.patch(`/api/prescriptions/${editing.id}`, payload);
-    mutate();
+    refreshAll();
   }
   async function remove() {
     if (!deleting) return;
     await api.del(`/api/prescriptions/${deleting.id}`);
     setDeleting(null);
-    mutate();
+    refreshAll();
   }
+
+  const events: CalendarEvent[] =
+    schedule.data?.map((o) => ({
+      date: parseISO(`${o.refillOn}T00:00:00`),
+      title: `${o.medication} ${o.dosage}`,
+      subtitle: `Qty ${o.quantity}${o.cancelled ? " · skipped" : o.overridden ? " · adjusted" : ""}`,
+      color: "amber",
+      cancelled: o.cancelled,
+      payload: o,
+    })) ?? [];
 
   return (
     <Card className="mb-6">
@@ -296,6 +326,13 @@ function PrescriptionsSection({
         count={data?.length ?? 0}
         onAdd={() => setShowForm(true)}
         addLabel="Add prescription"
+        rightSlot={
+          data && data.length > 0 ? (
+            <Button variant="ghost" onClick={() => setShowCalendar((v) => !v)}>
+              <CalendarDays className="h-4 w-4" /> {showCalendar ? "List" : "Refill calendar"}
+            </Button>
+          ) : null
+        }
       />
       <div className="p-4">
         {isLoading ? (
@@ -304,6 +341,12 @@ function PrescriptionsSection({
           <ErrorState message="Could not load prescriptions." onRetry={() => mutate()} />
         ) : !data || data.length === 0 ? (
           <EmptyState title="No prescriptions" hint="Prescribe the first medication." />
+        ) : showCalendar ? (
+          schedule.isLoading ? (
+            <LoadingState />
+          ) : (
+            <Calendar events={events} onSelectEvent={(e) => setEditingOcc(e.payload as AdminRefillOccurrence)} />
+          )
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.map((r) => (
@@ -330,6 +373,14 @@ function PrescriptionsSection({
           </ul>
         )}
       </div>
+
+      {editingOcc && (
+        <RefillOccurrenceDialog
+          occurrence={editingOcc}
+          onClose={() => setEditingOcc(null)}
+          onChanged={refreshAll}
+        />
+      )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="New prescription">
         <PrescriptionForm onSubmit={create} onDone={() => setShowForm(false)} />

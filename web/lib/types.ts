@@ -86,6 +86,26 @@ export interface RefillOccurrence {
   quantity: number;
   refillOn: string;
   refillSchedule: Repeat;
+  overridden: boolean;
+}
+
+export interface AdminRefillOccurrence {
+  prescriptionId: number;
+  occurrenceDate: string; // original slot — identity for editing/reverting
+  refillOn: string; // effective date (after any reschedule)
+  medication: string;
+  dosage: string;
+  quantity: number;
+  refillSchedule: Repeat;
+  cancelled: boolean;
+  overridden: boolean;
+}
+
+export interface RefillException {
+  occurrenceDate: string;
+  cancelled?: boolean;
+  refillOn?: string | null;
+  quantity?: number | null;
 }
 
 export interface PortalSummary {

@@ -156,6 +156,19 @@ Medication (lookup)    Dosage (lookup)
 
 `unique(appointment_id, occurrence_start)`. See §5a for how it's applied.
 
+**prescription_exception** — the refill analogue (per-occurrence override of a recurring refill).
+| Column | Type | Notes |
+|---|---|---|
+| id | int PK | |
+| prescription_id | int FK | the series |
+| occurrence_date | date | the **original** refill date this overrides (identity) |
+| cancelled | bool | true = skip just this refill |
+| refill_on | date? | null = keep original date; set = rescheduled |
+| quantity | int? | null = inherit series quantity |
+| created_at | datetime | |
+
+`unique(prescription_id, occurrence_date)`. Drug/dosage stay series-level.
+
 **medication** `{ name PK }` · **dosage** `{ value PK }` — seeded from `data.json` arrays; power the prescription form dropdowns.
 
 **audit_log** (Tier 1) `{ id, entity, entity_id, action(CREATE|UPDATE|DELETE), changes(json), at }` — write on every mutation; demonstrates healthcare "never silently mutate records" instinct.
@@ -200,35 +213,38 @@ def expand_occurrences(
 
 ### 5a. Single-occurrence editing (exceptions)
 
-Editing *one* occurrence of a series is the iCalendar **RECURRENCE-ID / EXDATE**
-problem. We keep the series as one rule and add an **exception** row keyed by the
-occurrence's **original** datetime (`appointment_exception`, above). A second pure,
-tested function applies them:
+The system has **two recurring series** — appointments and prescription refills —
+and both support editing *one* occurrence (the iCalendar **RECURRENCE-ID / EXDATE**
+problem). We keep each series as one rule and add an **exception** row keyed by the
+occurrence's **original** slot (`appointment_exception` / `prescription_exception`).
+
+Because both series are structurally identical, the engine is **generic and shared** —
+it only knows how to cancel a slot or move it; each domain layers its own field on top
+(provider for appointments, quantity for refills):
 
 ```python
-def expand_with_exceptions(start, repeat, until, provider, exceptions, window_start, window_end)
-    -> list[Occurrence]:   # Occurrence(occurrence_start, effective_start, provider, cancelled, overridden)
+def expand_slots(start, repeat, until, overrides, window_start, window_end)
+    -> list[Slot]:   # Slot(original, effective, cancelled, overridden)
 ```
 
-For each base occurrence: a cancelled exception drops it; an override swaps in the
-new `start_at`/`provider`; otherwise it passes through unchanged. Three operations
-fall out of one table — **reschedule** (set fields), **cancel** (set `cancelled`),
-**revert** (delete the row).
+The ORM→engine bridge (`occurrences.py`) builds the overrides, calls `expand_slots`,
+then re-joins the domain field. Three operations fall out of one table per series —
+**reschedule** (set fields), **cancel** (set `cancelled`), **revert** (delete the row).
 
 - **Window membership is decided by the *original* slot** — a rescheduled occurrence
   still belongs to its original week/month. (The alternative, re-windowing moved
   occurrences, is iCalendar-grade complexity not worth the scope.)
-- **Portal** filters out cancelled occurrences (read-only) and badges overridden
-  ones "Rescheduled"; **EMR** shows cancelled ones struck-through so they can be reverted.
-- The shared ORM→engine bridge lives in `occurrences.py`; matching is by instant
-  (tz-aware datetime equality), so it's offset-safe.
+- **Portal** hides cancelled occurrences (read-only) and badges overridden ones
+  "Rescheduled"; **EMR** shows cancelled ones struck-through so they can be reverted.
+- Matching is by instant (tz-aware datetime equality); refills, being date-based, are
+  lifted to midnight UTC to flow through the same datetime engine.
 - **Known limitation:** editing the *series'* start/rule shifts the original slots,
   which can orphan existing exceptions (they stop matching). iCalendar has the same
   issue; acceptable for this scope.
 
-**Entry point:** the EMR patient-detail **calendar** expands occurrences
-(`GET /patients/{id}/schedule`); clicking one opens an editor to reschedule / cancel /
-revert that single occurrence. Each edits emits a patient notification.
+**Entry point:** the EMR patient-detail **calendars** (appointments + refills) expand
+occurrences; clicking one opens an editor to reschedule / cancel / revert that single
+occurrence. Each edit emits a patient notification.
 
 ---
 
@@ -252,6 +268,9 @@ Base: `/api`. JSON. Pydantic-validated. Errors return `{ "detail": ... }` with p
 | POST | `/patients/{id}/prescriptions` | `{medication,dosage,quantity,refillOn,refillSchedule,until?}` → notification |
 | PATCH | `/prescriptions/{id}` | update → notification |
 | DELETE | `/prescriptions/{id}` | soft delete |
+| GET | `/patients/{id}/refill-schedule?months=` | expanded refill occurrences (with overrides) for the EMR calendar |
+| PUT | `/prescriptions/{id}/exceptions` | edit one refill: `{occurrenceDate, cancelled?, refillOn?, quantity?}` → notification |
+| DELETE | `/prescriptions/{id}/exceptions?at=` | revert one refill to the series |
 | GET | `/medications`, `/dosages` | form dropdown options |
 
 ### Portal (auth required — JWT cookie)

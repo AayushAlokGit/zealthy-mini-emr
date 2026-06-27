@@ -1,15 +1,20 @@
 """Prescription CRUD. Medication and dosage are validated against the seeded
 lookup tables so the form can never persist an unknown value."""
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..enums import NotificationType
-from ..models import Dosage, Medication, Patient, Prescription
-from ..schemas import PrescriptionCreate, PrescriptionOut, PrescriptionUpdate
+from ..enums import NotificationType, Repeat
+from ..models import Dosage, Medication, Patient, Prescription, PrescriptionException
+from ..schemas import (
+    PrescriptionCreate,
+    PrescriptionOut,
+    PrescriptionUpdate,
+    RefillException,
+)
 from ..services import emit_notification, record_audit
 
 router = APIRouter(prefix="/api", tags=["prescriptions"])
@@ -96,6 +101,74 @@ def update_prescription(
     db.commit()
     db.refresh(rx)
     return rx
+
+
+@router.put(
+    "/prescriptions/{prescription_id}/exceptions",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def upsert_refill_exception(
+    prescription_id: int, body: RefillException, db: Session = Depends(get_db)
+):
+    """Override a single refill: reschedule (refill_on/quantity) or skip it."""
+    rx = _get_prescription(db, prescription_id)
+    if rx.refill_schedule == Repeat.NONE:
+        raise HTTPException(422, "Only recurring refills have occurrences to edit")
+
+    existing = db.scalar(
+        select(PrescriptionException).where(
+            PrescriptionException.prescription_id == rx.id,
+            PrescriptionException.occurrence_date == body.occurrence_date,
+        )
+    )
+    if existing is None:
+        existing = PrescriptionException(
+            prescription_id=rx.id, occurrence_date=body.occurrence_date
+        )
+        db.add(existing)
+    existing.cancelled = body.cancelled
+    existing.refill_on = body.refill_on
+    existing.quantity = body.quantity
+
+    when = f"{body.occurrence_date:%b %d, %Y}"
+    if body.cancelled:
+        msg = f"Your {when} {rx.medication} refill was skipped."
+        ntype = NotificationType.RX_CANCELLED
+    else:
+        parts = []
+        if body.refill_on is not None:
+            parts.append(f"moved to {body.refill_on:%b %d, %Y}")
+        if body.quantity is not None:
+            parts.append(f"quantity {body.quantity}")
+        change = ", ".join(parts) if parts else "updated"
+        msg = f"Your {when} {rx.medication} refill was {change}."
+        ntype = NotificationType.RX_UPDATED
+
+    emit_notification(db, rx.patient_id, ntype, msg, rx.id)
+    record_audit(db, "prescription", rx.id, "UPDATE", f"Refill {when}: {msg}")
+    db.commit()
+
+
+@router.delete(
+    "/prescriptions/{prescription_id}/exceptions",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def revert_refill_exception(
+    prescription_id: int, at: date, db: Session = Depends(get_db)
+):
+    """Revert a single refill back to the series schedule (delete its override)."""
+    rx = _get_prescription(db, prescription_id)
+    existing = db.scalar(
+        select(PrescriptionException).where(
+            PrescriptionException.prescription_id == rx.id,
+            PrescriptionException.occurrence_date == at,
+        )
+    )
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No override for that refill")
+    db.delete(existing)
+    record_audit(db, "prescription", rx.id, "UPDATE", f"Refill {at:%b %d, %Y} reverted to series")
+    db.commit()
 
 
 @router.delete("/prescriptions/{prescription_id}", status_code=status.HTTP_204_NO_CONTENT)

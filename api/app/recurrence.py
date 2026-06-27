@@ -69,49 +69,47 @@ def expand_occurrences(
 
 
 @dataclass(frozen=True)
-class ExceptionData:
-    """A per-occurrence override, keyed externally by its original slot."""
+class SlotOverride:
+    """A per-occurrence override of a slot, keyed externally by its original time.
+
+    Domain-specific fields (provider, quantity, …) are applied by the caller;
+    this engine only knows how to cancel a slot or move it to a new time.
+    """
     cancelled: bool = False
-    provider: str | None = None
-    start_at: datetime | None = None
+    moved_to: datetime | None = None
 
 
 @dataclass(frozen=True)
-class Occurrence:
-    occurrence_start: datetime  # the original slot — stable identity for edits
-    effective_start: datetime   # where it actually lands (after any reschedule)
-    provider: str
+class Slot:
+    original: datetime   # the original slot — stable identity for edits
+    effective: datetime  # where it actually lands (after any reschedule)
     cancelled: bool
     overridden: bool
 
 
-def expand_with_exceptions(
+def expand_slots(
     start: datetime,
     repeat: Repeat,
     until: date | None,
-    provider: str,
-    exceptions: dict[datetime, ExceptionData],
+    overrides: dict[datetime, SlotOverride],
     window_start: datetime,
     window_end: datetime,
-) -> list[Occurrence]:
-    """Expand a series, applying single-occurrence overrides.
+) -> list[Slot]:
+    """Expand a series into slots, applying single-occurrence overrides.
 
     Window membership is decided by each occurrence's *original* slot, so a
     rescheduled occurrence still belongs to its original week/month. Cancelled
-    occurrences are returned with ``cancelled=True`` (callers that present a
-    read-only schedule, e.g. the portal, filter these out).
+    slots are returned with ``cancelled=True`` (callers presenting a read-only
+    schedule, e.g. the portal, filter these out). Shared by appointments and
+    prescription refills — each layers its own domain fields on top.
     """
-    result: list[Occurrence] = []
+    result: list[Slot] = []
     for slot in expand_occurrences(start, repeat, until, window_start, window_end):
-        ex = exceptions.get(slot)
-        if ex is None:
-            result.append(Occurrence(slot, slot, provider, False, False))
-        elif ex.cancelled:
-            result.append(Occurrence(slot, slot, ex.provider or provider, True, True))
+        ov = overrides.get(slot)
+        if ov is None:
+            result.append(Slot(slot, slot, False, False))
         else:
-            result.append(
-                Occurrence(slot, ex.start_at or slot, ex.provider or provider, False, True)
-            )
+            result.append(Slot(slot, ov.moved_to or slot, ov.cancelled, True))
     return result
 
 
