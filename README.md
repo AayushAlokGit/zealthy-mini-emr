@@ -1,5 +1,7 @@
 # Zealthy — Mini-EMR & Patient Portal
 
+[![CI](https://github.com/AayushAlokGit/zealthy-mini-emr/actions/workflows/ci.yml/badge.svg)](https://github.com/AayushAlokGit/zealthy-mini-emr/actions/workflows/ci.yml)
+
 A full-stack mini-EMR and patient portal. Providers manage patients, appointments,
 and prescriptions in the EMR; patients log in to a portal to see what's coming up.
 
