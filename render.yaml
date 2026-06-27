@@ -1,0 +1,18 @@
+# One-click deploy of the FastAPI backend on Render (https://render.com).
+# The frontend deploys separately on Vercel (root directory: web/).
+services:
+  - type: web
+    name: zealthy-api
+    runtime: python
+    rootDir: api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COOKIE_SAMESITE
+        value: none # cross-site (Vercel frontend + Render API)
+      - key: COOKIE_SECURE
+        value: true # required when SameSite=None
+      - key: FRONTEND_ORIGINS
+        value: https://CHANGE-ME.vercel.app # set to your deployed frontend URL

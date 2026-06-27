@@ -7,11 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .db import init_db
 from .routers import appointments, auth, lookups, me, patients, prescriptions
+from .seed import seed_if_empty
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    if settings.seed_on_startup:
+        seed_if_empty()
     yield
 
 

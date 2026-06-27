@@ -34,6 +34,7 @@ def client(tmp_path):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+    # No context manager: tests provide their own schema via the override above,
+    # so we skip the app lifespan (which would init/seed the real database).
+    yield TestClient(app)
     app.dependency_overrides.clear()

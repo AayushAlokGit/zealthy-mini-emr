@@ -76,5 +76,14 @@ def seed() -> None:
     print(f"Seeded from {DATA_PATH}")
 
 
+def seed_if_empty() -> None:
+    """Seed only when no patients exist yet (safe to call on every startup)."""
+    init_db()
+    with SessionLocal() as db:
+        if db.scalar(select(Patient)) is not None:
+            return
+    seed()
+
+
 if __name__ == "__main__":
     seed()

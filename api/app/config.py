@@ -7,6 +7,10 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./zealthy.db"
 
+    # Seed the DB from data.json on startup when it has no patients yet.
+    # Convenient for ephemeral demo hosts that reset the SQLite file on deploy.
+    seed_on_startup: bool = True
+
     # Auth
     jwt_secret: str = "dev-secret-change-in-production-0123456789abcdef"
     jwt_algorithm: str = "HS256"
