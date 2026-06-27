@@ -18,4 +18,4 @@ services:
       - key: COOKIE_SECURE
         value: true # required when SameSite=None
       - key: FRONTEND_ORIGINS
-        value: https://CHANGE-ME.vercel.app # set to your deployed frontend URL
+        value: https://zealthy-mini-emr-one.vercel.app # deployed frontend origin
