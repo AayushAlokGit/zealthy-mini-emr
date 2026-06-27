@@ -12,9 +12,11 @@ from sqlalchemy import select
 from .auth import hash_password
 from .db import SessionLocal, init_db
 from .enums import Repeat
+from .logging_setup import get_logger
 from .models import Appointment, Dosage, Medication, Patient, Prescription
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data.json"
+log = get_logger("seed")
 
 
 def _parse_repeat(value: str | None) -> Repeat:
@@ -73,7 +75,7 @@ def seed() -> None:
                     )
             db.commit()
 
-    print(f"Seeded from {DATA_PATH}")
+    log.info("Seeded database from %s", DATA_PATH.name)
 
 
 def seed_if_empty() -> None:
@@ -81,6 +83,7 @@ def seed_if_empty() -> None:
     init_db()
     with SessionLocal() as db:
         if db.scalar(select(Patient)) is not None:
+            log.info("Database already populated; skipping seed.")
             return
     seed()
 

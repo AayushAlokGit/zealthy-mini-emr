@@ -6,7 +6,10 @@ forget to record an audit entry or notify the patient.
 from sqlalchemy.orm import Session
 
 from .enums import NotificationType
+from .logging_setup import get_logger
 from .models import AuditLog, Notification
+
+log = get_logger("audit")
 
 
 def emit_notification(
@@ -24,6 +27,7 @@ def emit_notification(
         related_id=related_id,
     )
     db.add(note)
+    log.debug("notify patient=%s type=%s", patient_id, type.value)
     return note
 
 
@@ -34,7 +38,11 @@ def record_audit(
     action: str,
     summary: str,
 ) -> AuditLog:
-    """Append an audit-log entry (caller commits)."""
+    """Append an audit-log entry (caller commits).
+
+    Also emits an operational log line — since every mutation routes through
+    here, this gives full mutation observability for free.
+    """
     entry = AuditLog(
         entity=entity,
         entity_id=entity_id,
@@ -42,4 +50,5 @@ def record_audit(
         summary=summary,
     )
     db.add(entry)
+    log.info("%s %s#%s - %s", action, entity, entity_id, summary)
     return entry

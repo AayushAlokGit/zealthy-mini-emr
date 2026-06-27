@@ -6,10 +6,12 @@ from sqlalchemy.orm import Session
 from ..auth import create_token, get_current_patient, verify_password
 from ..config import settings
 from ..db import get_db
+from ..logging_setup import get_logger
 from ..models import Patient
 from ..schemas import LoginRequest, PatientOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+log = get_logger("auth")
 
 
 def _set_session_cookie(response: Response, patient_id: int) -> None:
@@ -32,11 +34,14 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
         )
     )
     if patient is None or not verify_password(body.password, patient.password_hash):
+        # Log failed attempts for security monitoring (email only, never the password).
+        log.warning("Failed login for email=%s", body.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
     _set_session_cookie(response, patient.id)
+    log.info("Patient %s logged in", patient.id)
     return patient
 
 

@@ -7,6 +7,9 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./zealthy.db"
 
+    # Logging verbosity (DEBUG | INFO | WARNING | ERROR).
+    log_level: str = "INFO"
+
     # Seed the DB from data.json on startup when it has no patients yet.
     # Convenient for ephemeral demo hosts that reset the SQLite file on deploy.
     seed_on_startup: bool = True
