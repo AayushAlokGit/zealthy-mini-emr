@@ -30,7 +30,7 @@ def _active_appointments(db: Session, patient_id: int) -> list[Appointment]:
     return list(
         db.scalars(
             select(Appointment)
-            .where(Appointment.patient_id == patient_id, Appointment.deleted_at.is_(None))
+            .where(Appointment.patient_id == patient_id)
             .options(selectinload(Appointment.exceptions))
         )
     )
@@ -40,7 +40,7 @@ def _active_prescriptions(db: Session, patient_id: int) -> list[Prescription]:
     return list(
         db.scalars(
             select(Prescription)
-            .where(Prescription.patient_id == patient_id, Prescription.deleted_at.is_(None))
+            .where(Prescription.patient_id == patient_id)
             .options(selectinload(Prescription.exceptions))
         )
     )

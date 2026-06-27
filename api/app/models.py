@@ -22,7 +22,6 @@ class Patient(Base):
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     appointments: Mapped[list["Appointment"]] = relationship(
         back_populates="patient", cascade="all, delete-orphan"
@@ -45,7 +44,6 @@ class Appointment(Base):
     repeat: Mapped[Repeat] = mapped_column(String(16), default=Repeat.NONE)
     until: Mapped[date | None] = mapped_column(Date, nullable=True)  # None = open-ended
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     patient: Mapped["Patient"] = relationship(back_populates="appointments")
     exceptions: Mapped[list["AppointmentException"]] = relationship(
@@ -82,7 +80,6 @@ class Prescription(Base):
     refill_schedule: Mapped[Repeat] = mapped_column(String(16), default=Repeat.MONTHLY)
     until: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     patient: Mapped["Patient"] = relationship(back_populates="prescriptions")
     exceptions: Mapped[list["PrescriptionException"]] = relationship(
@@ -131,14 +128,3 @@ class Dosage(Base):
     __tablename__ = "dosages"
 
     value: Mapped[str] = mapped_column(String(40), primary_key=True)
-
-
-class AuditLog(Base):
-    __tablename__ = "audit_logs"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    entity: Mapped[str] = mapped_column(String(40))
-    entity_id: Mapped[int] = mapped_column(Integer)
-    action: Mapped[str] = mapped_column(String(16))  # CREATE | UPDATE | DELETE
-    summary: Mapped[str] = mapped_column(Text)
-    at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

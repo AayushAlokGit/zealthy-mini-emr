@@ -27,11 +27,7 @@ def _set_session_cookie(response: Response, patient_id: int) -> None:
 
 @router.post("/login", response_model=PatientOut)
 def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    patient = db.scalar(
-        select(Patient).where(
-            Patient.email == body.email, Patient.deleted_at.is_(None)
-        )
-    )
+    patient = db.scalar(select(Patient).where(Patient.email == body.email))
     if patient is None or not verify_password(body.password, patient.password_hash):
         log.warning("Failed login for email=%s", body.email)
         raise HTTPException(

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -13,15 +13,13 @@ from ..schemas import (
     PrescriptionUpdate,
     RefillException,
 )
-from ..services import emit_notification, record_audit
+from ..services import emit_notification
 
 router = APIRouter(prefix="/api", tags=["prescriptions"])
 
 
 def _get_patient(db: Session, patient_id: int) -> Patient:
-    patient = db.scalar(
-        select(Patient).where(Patient.id == patient_id, Patient.deleted_at.is_(None))
-    )
+    patient = db.scalar(select(Patient).where(Patient.id == patient_id))
     if patient is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient not found")
     return patient
@@ -29,9 +27,7 @@ def _get_patient(db: Session, patient_id: int) -> Patient:
 
 def _get_prescription(db: Session, prescription_id: int) -> Prescription:
     rx = db.scalar(
-        select(Prescription).where(
-            Prescription.id == prescription_id, Prescription.deleted_at.is_(None)
-        )
+        select(Prescription).where(Prescription.id == prescription_id)
     )
     if rx is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Prescription not found")
@@ -77,7 +73,6 @@ def create_prescription(
         f"New prescription: {rx.medication} {rx.dosage}, refill on {rx.refill_on}.",
         related_id=rx.id,
     )
-    record_audit(db, "prescription", rx.id, "CREATE", f"Prescribed {rx.medication} {rx.dosage}")
     db.commit()
     db.refresh(rx)
     return rx
@@ -95,7 +90,6 @@ def update_prescription(
 
     msg = f"Prescription {rx.medication} {rx.dosage} was updated."
     emit_notification(db, rx.patient_id, NotificationType.RX_UPDATED, msg, rx.id)
-    record_audit(db, "prescription", rx.id, "UPDATE", msg)
     db.commit()
     db.refresh(rx)
     return rx
@@ -142,7 +136,6 @@ def upsert_refill_exception(
         ntype = NotificationType.RX_UPDATED
 
     emit_notification(db, rx.patient_id, ntype, msg, rx.id)
-    record_audit(db, "prescription", rx.id, "UPDATE", f"Refill {when}: {msg}")
     db.commit()
 
 
@@ -163,14 +156,12 @@ def revert_refill_exception(
     if existing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No override for that refill")
     db.delete(existing)
-    record_audit(db, "prescription", rx.id, "UPDATE", f"Refill {at:%b %d, %Y} reverted to series")
     db.commit()
 
 
 @router.delete("/prescriptions/{prescription_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_prescription(prescription_id: int, db: Session = Depends(get_db)):
     rx = _get_prescription(db, prescription_id)
-    rx.deleted_at = datetime.now(timezone.utc)
     emit_notification(
         db,
         rx.patient_id,
@@ -178,5 +169,5 @@ def delete_prescription(prescription_id: int, db: Session = Depends(get_db)):
         f"Prescription {rx.medication} {rx.dosage} was discontinued.",
         rx.id,
     )
-    record_audit(db, "prescription", rx.id, "DELETE", f"Discontinued {rx.medication}")
+    db.delete(rx)
     db.commit()

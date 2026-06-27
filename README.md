@@ -73,12 +73,10 @@ It's pure and **unit-tested** (month-boundary rollover, end-of-month clamping,
   `-07:00` offsets in the seed data.
 - **In-app notifications** — every EMR mutation emits a patient notification; the
   portal polls and shows an unread bell. Admin acts → patient sees it.
-- **Soft deletes + audit log** — medical records are never hard-deleted; every
-  mutation is recorded. A healthcare-minded default.
 - **Observability** — centralized logging (`LOG_LEVEL` env): startup lifecycle,
-  per-request lines with a correlation id + latency + status-based level, auth
-  success/failure, and every mutation (via the audit path). The request id is
-  returned as `X-Request-ID` so a client error traces to its server log line.
+  per-request lines with a correlation id + latency + status-based level, and auth
+  success/failure. The request id is returned as `X-Request-ID` so a client error
+  traces to its server log line.
 
 ---
 

@@ -53,6 +53,15 @@ def test_create_patient_and_login(client):
     assert login.json()["id"] == pid
 
 
+def test_get_and_update_patient(client):
+    pid = _create_patient(client).json()["id"]
+    assert client.get(f"/api/patients/{pid}").json()["email"] == "alice@example.com"
+
+    res = client.patch(f"/api/patients/{pid}", json={"phone": "555-0000"})
+    assert res.status_code == 200
+    assert res.json()["phone"] == "555-0000"
+
+
 def test_duplicate_email_rejected(client):
     _create_patient(client)
     dup = _create_patient(client)
@@ -109,7 +118,7 @@ def test_end_recurring_appointment(client):
     assert res.json()["until"] == "2026-07-15"
 
 
-def test_soft_delete_removes_from_list(client):
+def test_delete_removes_from_list(client):
     pid = _create_patient(client).json()["id"]
     appt = client.post(
         f"/api/patients/{pid}/appointments",

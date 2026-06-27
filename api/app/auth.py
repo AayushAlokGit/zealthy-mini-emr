@@ -56,6 +56,6 @@ def get_current_patient(
         raise unauthorized
 
     patient = db.get(Patient, patient_id)
-    if patient is None or patient.deleted_at is not None:
+    if patient is None:
         raise unauthorized
     return patient

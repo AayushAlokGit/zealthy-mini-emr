@@ -19,19 +19,14 @@ from ..schemas import (
     PatientUpdate,
     PrescriptionOut,
 )
-from ..services import record_audit
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
-
-
-def _active(query):
-    return query.where(Patient.deleted_at.is_(None))
 
 
 @router.get("", response_model=list[PatientListItem])
 def list_patients(db: Session = Depends(get_db)):
     patients = db.scalars(
-        _active(select(Patient))
+        select(Patient)
         .options(selectinload(Patient.appointments), selectinload(Patient.prescriptions))
         .order_by(Patient.name)
     ).all()
@@ -39,8 +34,8 @@ def list_patients(db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
     rows: list[PatientListItem] = []
     for p in patients:
-        appts = [a for a in p.appointments if a.deleted_at is None]
-        rx = [r for r in p.prescriptions if r.deleted_at is None]
+        appts = p.appointments
+        rx = p.prescriptions
 
         next_appt = None
         for a in appts:
@@ -63,8 +58,8 @@ def list_patients(db: Session = Depends(get_db)):
     return rows
 
 
-def _get_active_patient(db: Session, patient_id: int) -> Patient:
-    patient = db.scalar(_active(select(Patient)).where(Patient.id == patient_id))
+def _get_patient(db: Session, patient_id: int) -> Patient:
+    patient = db.scalar(select(Patient).where(Patient.id == patient_id))
     if patient is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient not found")
     return patient
@@ -84,8 +79,6 @@ def create_patient(body: PatientCreate, db: Session = Depends(get_db)):
         phone=body.phone,
     )
     db.add(patient)
-    db.flush()
-    record_audit(db, "patient", patient.id, "CREATE", f"Created patient {patient.name}")
     db.commit()
     db.refresh(patient)
     return patient
@@ -93,12 +86,12 @@ def create_patient(body: PatientCreate, db: Session = Depends(get_db)):
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(patient_id: int, db: Session = Depends(get_db)):
-    return _get_active_patient(db, patient_id)
+    return _get_patient(db, patient_id)
 
 
 @router.patch("/{patient_id}", response_model=PatientOut)
 def update_patient(patient_id: int, body: PatientUpdate, db: Session = Depends(get_db)):
-    patient = _get_active_patient(db, patient_id)
+    patient = _get_patient(db, patient_id)
 
     data = body.model_dump(exclude_unset=True)
     if "email" in data and data["email"] != patient.email:
@@ -110,7 +103,6 @@ def update_patient(patient_id: int, body: PatientUpdate, db: Session = Depends(g
     for field, value in data.items():
         setattr(patient, field, value)
 
-    record_audit(db, "patient", patient.id, "UPDATE", f"Updated patient {patient.name}")
     db.commit()
     db.refresh(patient)
     return patient
@@ -118,10 +110,10 @@ def update_patient(patient_id: int, body: PatientUpdate, db: Session = Depends(g
 
 @router.get("/{patient_id}/appointments", response_model=list[AppointmentOut])
 def list_patient_appointments(patient_id: int, db: Session = Depends(get_db)):
-    _get_active_patient(db, patient_id)
+    _get_patient(db, patient_id)
     return db.scalars(
         select(Appointment)
-        .where(Appointment.patient_id == patient_id, Appointment.deleted_at.is_(None))
+        .where(Appointment.patient_id == patient_id)
         .order_by(Appointment.start_at)
     ).all()
 
@@ -132,10 +124,10 @@ def patient_schedule(
     months: int = Query(default=3, ge=1, le=12),
     db: Session = Depends(get_db),
 ):
-    _get_active_patient(db, patient_id)
+    _get_patient(db, patient_id)
     appts = db.scalars(
         select(Appointment)
-        .where(Appointment.patient_id == patient_id, Appointment.deleted_at.is_(None))
+        .where(Appointment.patient_id == patient_id)
         .options(selectinload(Appointment.exceptions))
     ).all()
 
@@ -165,10 +157,10 @@ def patient_refill_schedule(
     months: int = Query(default=3, ge=1, le=12),
     db: Session = Depends(get_db),
 ):
-    _get_active_patient(db, patient_id)
+    _get_patient(db, patient_id)
     rxs = db.scalars(
         select(Prescription)
-        .where(Prescription.patient_id == patient_id, Prescription.deleted_at.is_(None))
+        .where(Prescription.patient_id == patient_id)
         .options(selectinload(Prescription.exceptions))
     ).all()
 
@@ -196,9 +188,9 @@ def patient_refill_schedule(
 
 @router.get("/{patient_id}/prescriptions", response_model=list[PrescriptionOut])
 def list_patient_prescriptions(patient_id: int, db: Session = Depends(get_db)):
-    _get_active_patient(db, patient_id)
+    _get_patient(db, patient_id)
     return db.scalars(
         select(Prescription)
-        .where(Prescription.patient_id == patient_id, Prescription.deleted_at.is_(None))
+        .where(Prescription.patient_id == patient_id)
         .order_by(Prescription.refill_on)
     ).all()

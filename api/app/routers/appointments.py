@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -13,15 +13,13 @@ from ..schemas import (
     AppointmentUpdate,
     OccurrenceException,
 )
-from ..services import emit_notification, record_audit
+from ..services import emit_notification
 
 router = APIRouter(prefix="/api", tags=["appointments"])
 
 
 def _get_patient(db: Session, patient_id: int) -> Patient:
-    patient = db.scalar(
-        select(Patient).where(Patient.id == patient_id, Patient.deleted_at.is_(None))
-    )
+    patient = db.scalar(select(Patient).where(Patient.id == patient_id))
     if patient is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Patient not found")
     return patient
@@ -29,9 +27,7 @@ def _get_patient(db: Session, patient_id: int) -> Patient:
 
 def _get_appointment(db: Session, appointment_id: int) -> Appointment:
     appt = db.scalar(
-        select(Appointment).where(
-            Appointment.id == appointment_id, Appointment.deleted_at.is_(None)
-        )
+        select(Appointment).where(Appointment.id == appointment_id)
     )
     if appt is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Appointment not found")
@@ -63,7 +59,6 @@ def create_appointment(
         f"New appointment with {appt.provider} on {appt.start_at:%b %d, %Y at %I:%M %p} UTC.",
         related_id=appt.id,
     )
-    record_audit(db, "appointment", appt.id, "CREATE", f"Booked with {appt.provider}")
     db.commit()
     db.refresh(appt)
     return appt
@@ -85,7 +80,6 @@ def update_appointment(
         else f"Appointment with {appt.provider} was updated."
     )
     emit_notification(db, appt.patient_id, NotificationType.APPT_UPDATED, msg, appt.id)
-    record_audit(db, "appointment", appt.id, "UPDATE", msg)
     db.commit()
     db.refresh(appt)
     return appt
@@ -132,7 +126,6 @@ def upsert_exception(
         ntype = NotificationType.APPT_UPDATED
 
     emit_notification(db, appt.patient_id, ntype, msg, appt.id)
-    record_audit(db, "appointment", appt.id, "UPDATE", f"Occurrence {when}: {msg}")
     db.commit()
 
 
@@ -153,16 +146,12 @@ def revert_exception(
     if existing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No override for that occurrence")
     db.delete(existing)
-    record_audit(
-        db, "appointment", appt.id, "UPDATE", f"Occurrence {at:%b %d, %Y} reverted to series"
-    )
     db.commit()
 
 
 @router.delete("/appointments/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_appointment(appointment_id: int, db: Session = Depends(get_db)):
     appt = _get_appointment(db, appointment_id)
-    appt.deleted_at = datetime.now(timezone.utc)
     emit_notification(
         db,
         appt.patient_id,
@@ -170,5 +159,5 @@ def delete_appointment(appointment_id: int, db: Session = Depends(get_db)):
         f"Appointment with {appt.provider} was cancelled.",
         appt.id,
     )
-    record_audit(db, "appointment", appt.id, "DELETE", f"Cancelled with {appt.provider}")
+    db.delete(appt)
     db.commit()

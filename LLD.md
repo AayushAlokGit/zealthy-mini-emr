@@ -104,7 +104,6 @@ Medication (lookup)    Dosage (lookup)
 | dob | date? | basic patient info |
 | phone | text? | basic patient info |
 | created_at | datetime | |
-| deleted_at | datetime? | soft delete |
 
 **appointment**
 | Column | Type | Notes |
@@ -116,7 +115,6 @@ Medication (lookup)    Dosage (lookup)
 | repeat | enum `NONE\|WEEKLY\|MONTHLY` | `NONE` = one-time |
 | until | date? | null = open-ended; "end series" sets this |
 | created_at | datetime | |
-| deleted_at | datetime? | soft delete |
 
 **prescription**
 | Column | Type | Notes |
@@ -130,7 +128,6 @@ Medication (lookup)    Dosage (lookup)
 | refill_schedule | enum `NONE\|WEEKLY\|MONTHLY` | |
 | until | date? | end recurring refills |
 | created_at | datetime | |
-| deleted_at | datetime? | soft delete |
 
 **notification**
 | Column | Type | Notes |
@@ -170,8 +167,6 @@ Medication (lookup)    Dosage (lookup)
 `unique(prescription_id, occurrence_date)`. Drug/dosage stay series-level.
 
 **medication** `{ name PK }` · **dosage** `{ value PK }` — seeded from `data.json` arrays; power the prescription form dropdowns.
-
-**audit_log** (Tier 1) `{ id, entity, entity_id, action(CREATE|UPDATE|DELETE), changes(json), at }` — write on every mutation; demonstrates healthcare "never silently mutate records" instinct.
 
 ### Mapping from seed `data.json`
 - `users[]` → `patient` (hash `password`); embedded `appointments[]`/`prescriptions[]` → own tables with `patient_id`.
@@ -261,13 +256,13 @@ Base: `/api`. JSON. Pydantic-validated. Errors return `{ "detail": ... }` with p
 | PATCH | `/patients/{id}` | update (CRU; no delete per spec) |
 | POST | `/patients/{id}/appointments` | `{provider,startAt,repeat,until?}` → emits notification |
 | PATCH | `/appointments/{id}` | update / **end series** (set `until`) → emits notification |
-| DELETE | `/appointments/{id}` | soft delete → emits cancel notification |
+| DELETE | `/appointments/{id}` | delete → emits cancel notification |
 | GET | `/patients/{id}/schedule?months=` | expanded occurrences (with overrides) for the EMR calendar |
 | PUT | `/appointments/{id}/exceptions` | edit one occurrence: `{occurrenceStart, cancelled?, provider?, startAt?}` → notification |
 | DELETE | `/appointments/{id}/exceptions?at=` | revert one occurrence to the series |
 | POST | `/patients/{id}/prescriptions` | `{medication,dosage,quantity,refillOn,refillSchedule,until?}` → notification |
 | PATCH | `/prescriptions/{id}` | update → notification |
-| DELETE | `/prescriptions/{id}` | soft delete |
+| DELETE | `/prescriptions/{id}` | delete → emits cancel notification |
 | GET | `/patients/{id}/refill-schedule?months=` | expanded refill occurrences (with overrides) for the EMR calendar |
 | PUT | `/prescriptions/{id}/exceptions` | edit one refill: `{occurrenceDate, cancelled?, refillOn?, quantity?}` → notification |
 | DELETE | `/prescriptions/{id}/exceptions?at=` | revert one refill to the series |
@@ -343,7 +338,7 @@ Every data view has explicit **loading / error / empty** states (Tier 0).
 2. **Recurrence engine + tests** (TDD — pure, no deps).
 3. **Seed script** from `data.json` (idempotent).
 4. **Auth** (hash, login, JWT cookie, guard dependency).
-5. **EMR API** (patients/appts/rx CRUD + audit + notification emit).
+5. **EMR API** (patients/appts/rx CRUD + notification emit).
 6. **Portal API** (`/me/*` summary, schedule, notifications — using the engine).
 7. **OpenAPI → TS types**; typed API client + Zod schemas.
 8. **EMR UI** (table, forms, detail, calendar).
