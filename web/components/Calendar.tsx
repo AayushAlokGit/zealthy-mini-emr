@@ -22,12 +22,22 @@ export interface CalendarEvent {
   title: string;
   subtitle?: string;
   color?: "teal" | "amber";
+  cancelled?: boolean;
+  /** Arbitrary data passed back to onSelectEvent (e.g. the occurrence record). */
+  payload?: unknown;
 }
 
 const dayKey = (d: Date) => format(d, "yyyy-MM-dd");
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function Calendar({ events }: { events: CalendarEvent[] }) {
+export function Calendar({
+  events,
+  onSelectEvent,
+}: {
+  events: CalendarEvent[];
+  /** When provided, side-panel events become clickable (e.g. to edit them). */
+  onSelectEvent?: (event: CalendarEvent) => void;
+}) {
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [selected, setSelected] = useState<Date | null>(new Date());
 
@@ -99,9 +109,11 @@ export function Calendar({ events }: { events: CalendarEvent[] }) {
                       key={i}
                       className={cn(
                         "truncate rounded px-1 py-0.5 text-[10px] font-medium",
-                        e.color === "amber"
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-teal-100 text-teal-700",
+                        e.cancelled
+                          ? "bg-slate-100 text-slate-400 line-through"
+                          : e.color === "amber"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-teal-100 text-teal-700",
                       )}
                     >
                       {e.title}
@@ -125,13 +137,39 @@ export function Calendar({ events }: { events: CalendarEvent[] }) {
           <p className="mt-3 text-xs text-slate-400">Nothing scheduled.</p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {selectedEvents.map((e, i) => (
-              <li key={i} className="rounded-lg bg-white p-2.5 shadow-sm">
-                <p className="text-sm font-medium text-slate-800">{e.title}</p>
-                {e.subtitle && <p className="text-xs text-slate-500">{e.subtitle}</p>}
-              </li>
-            ))}
+            {selectedEvents.map((e, i) => {
+              const body = (
+                <>
+                  <p
+                    className={cn(
+                      "text-sm font-medium text-slate-800",
+                      e.cancelled && "text-slate-400 line-through",
+                    )}
+                  >
+                    {e.title}
+                  </p>
+                  {e.subtitle && <p className="text-xs text-slate-500">{e.subtitle}</p>}
+                </>
+              );
+              return onSelectEvent ? (
+                <li key={i}>
+                  <button
+                    onClick={() => onSelectEvent(e)}
+                    className="w-full rounded-lg bg-white p-2.5 text-left shadow-sm transition-colors hover:bg-teal-50"
+                  >
+                    {body}
+                  </button>
+                </li>
+              ) : (
+                <li key={i} className="rounded-lg bg-white p-2.5 shadow-sm">
+                  {body}
+                </li>
+              );
+            })}
           </ul>
+        )}
+        {onSelectEvent && selectedEvents.length > 0 && (
+          <p className="mt-3 text-[11px] text-slate-400">Click an appointment to edit that occurrence.</p>
         )}
       </div>
     </div>

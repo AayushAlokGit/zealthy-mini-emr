@@ -6,7 +6,7 @@ Concrete occurrences are computed on demand by ``recurrence.expand_occurrences``
 """
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -55,6 +55,32 @@ class Appointment(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     patient: Mapped["Patient"] = relationship(back_populates="appointments")
+    exceptions: Mapped[list["AppointmentException"]] = relationship(
+        back_populates="appointment", cascade="all, delete-orphan"
+    )
+
+
+class AppointmentException(Base):
+    """A per-occurrence override of a recurring appointment (iCalendar RECURRENCE-ID).
+
+    Identified by ``occurrence_start`` — the *original* datetime of the slot it
+    overrides. ``cancelled`` removes that one occurrence; ``provider``/``start_at``
+    reschedule it. Deleting the row reverts the occurrence to the series rule.
+    """
+    __tablename__ = "appointment_exceptions"
+    __table_args__ = (
+        UniqueConstraint("appointment_id", "occurrence_start", name="uq_exception_slot"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    appointment_id: Mapped[int] = mapped_column(ForeignKey("appointments.id"), index=True)
+    occurrence_start: Mapped[datetime] = mapped_column(UTCDateTime)
+    cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
+    provider: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    start_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    appointment: Mapped["Appointment"] = relationship(back_populates="exceptions")
 
 
 class Prescription(Base):

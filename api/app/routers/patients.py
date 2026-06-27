@@ -4,15 +4,17 @@ No delete — the spec calls for CRU on patients.
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..auth import hash_password
 from ..db import get_db
 from ..models import Appointment, Patient, Prescription
-from ..recurrence import next_occurrence
+from ..occurrences import expand_appointment
+from ..recurrence import add_months, next_occurrence
 from ..schemas import (
+    AdminOccurrence,
     AppointmentOut,
     PatientCreate,
     PatientListItem,
@@ -126,6 +128,41 @@ def list_patient_appointments(patient_id: int, db: Session = Depends(get_db)):
         .where(Appointment.patient_id == patient_id, Appointment.deleted_at.is_(None))
         .order_by(Appointment.start_at)
     ).all()
+
+
+@router.get("/{patient_id}/schedule", response_model=list[AdminOccurrence])
+def patient_schedule(
+    patient_id: int,
+    months: int = Query(default=3, ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """Expanded appointment occurrences for the EMR calendar, including
+    per-occurrence overrides (so each is editable/revertable)."""
+    _get_active_patient(db, patient_id)
+    appts = db.scalars(
+        select(Appointment)
+        .where(Appointment.patient_id == patient_id, Appointment.deleted_at.is_(None))
+        .options(selectinload(Appointment.exceptions))
+    ).all()
+
+    now = datetime.now(timezone.utc)
+    window_end = add_months(now, months)
+    rows: list[AdminOccurrence] = []
+    for a in appts:
+        for occ in expand_appointment(a, now, window_end):
+            rows.append(
+                AdminOccurrence(
+                    appointment_id=a.id,
+                    occurrence_start=occ.occurrence_start,
+                    occurs_at=occ.effective_start,
+                    provider=occ.provider,
+                    repeat=a.repeat,
+                    cancelled=occ.cancelled,
+                    overridden=occ.overridden,
+                )
+            )
+    rows.sort(key=lambda r: r.occurs_at)
+    return rows
 
 
 @router.get("/{patient_id}/prescriptions", response_model=list[PrescriptionOut])

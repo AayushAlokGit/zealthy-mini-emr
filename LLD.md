@@ -143,6 +143,19 @@ Medication (lookup)    Dosage (lookup)
 | read_at | datetime? | null = unread |
 | created_at | datetime | |
 
+**appointment_exception** — a per-occurrence override of a recurring appointment (iCalendar RECURRENCE-ID).
+| Column | Type | Notes |
+|---|---|---|
+| id | int PK | |
+| appointment_id | int FK | the series |
+| occurrence_start | datetime | the **original** slot this overrides (identity) |
+| cancelled | bool | true = drop just this occurrence (EXDATE) |
+| provider | text? | null = inherit from series |
+| start_at | datetime? | null = keep original time; set = rescheduled |
+| created_at | datetime | |
+
+`unique(appointment_id, occurrence_start)`. See §5a for how it's applied.
+
 **medication** `{ name PK }` · **dosage** `{ value PK }` — seeded from `data.json` arrays; power the prescription form dropdowns.
 
 **audit_log** (Tier 1) `{ id, entity, entity_id, action(CREATE|UPDATE|DELETE), changes(json), at }` — write on every mutation; demonstrates healthcare "never silently mutate records" instinct.
@@ -185,6 +198,38 @@ def expand_occurrences(
 
 **Tests** (`test_recurrence.py`): weekly crossing a month boundary, monthly end-of-month clamp, `until` cutoff, one-time in/out of window, empty results, DST/offset correctness.
 
+### 5a. Single-occurrence editing (exceptions)
+
+Editing *one* occurrence of a series is the iCalendar **RECURRENCE-ID / EXDATE**
+problem. We keep the series as one rule and add an **exception** row keyed by the
+occurrence's **original** datetime (`appointment_exception`, above). A second pure,
+tested function applies them:
+
+```python
+def expand_with_exceptions(start, repeat, until, provider, exceptions, window_start, window_end)
+    -> list[Occurrence]:   # Occurrence(occurrence_start, effective_start, provider, cancelled, overridden)
+```
+
+For each base occurrence: a cancelled exception drops it; an override swaps in the
+new `start_at`/`provider`; otherwise it passes through unchanged. Three operations
+fall out of one table — **reschedule** (set fields), **cancel** (set `cancelled`),
+**revert** (delete the row).
+
+- **Window membership is decided by the *original* slot** — a rescheduled occurrence
+  still belongs to its original week/month. (The alternative, re-windowing moved
+  occurrences, is iCalendar-grade complexity not worth the scope.)
+- **Portal** filters out cancelled occurrences (read-only) and badges overridden
+  ones "Rescheduled"; **EMR** shows cancelled ones struck-through so they can be reverted.
+- The shared ORM→engine bridge lives in `occurrences.py`; matching is by instant
+  (tz-aware datetime equality), so it's offset-safe.
+- **Known limitation:** editing the *series'* start/rule shifts the original slots,
+  which can orphan existing exceptions (they stop matching). iCalendar has the same
+  issue; acceptable for this scope.
+
+**Entry point:** the EMR patient-detail **calendar** expands occurrences
+(`GET /patients/{id}/schedule`); clicking one opens an editor to reschedule / cancel /
+revert that single occurrence. Each edits emits a patient notification.
+
 ---
 
 ## 6. API Contract
@@ -201,6 +246,9 @@ Base: `/api`. JSON. Pydantic-validated. Errors return `{ "detail": ... }` with p
 | POST | `/patients/{id}/appointments` | `{provider,startAt,repeat,until?}` → emits notification |
 | PATCH | `/appointments/{id}` | update / **end series** (set `until`) → emits notification |
 | DELETE | `/appointments/{id}` | soft delete → emits cancel notification |
+| GET | `/patients/{id}/schedule?months=` | expanded occurrences (with overrides) for the EMR calendar |
+| PUT | `/appointments/{id}/exceptions` | edit one occurrence: `{occurrenceStart, cancelled?, provider?, startAt?}` → notification |
+| DELETE | `/appointments/{id}/exceptions?at=` | revert one occurrence to the series |
 | POST | `/patients/{id}/prescriptions` | `{medication,dosage,quantity,refillOn,refillSchedule,until?}` → notification |
 | PATCH | `/prescriptions/{id}` | update → notification |
 | DELETE | `/prescriptions/{id}` | soft delete |
@@ -287,10 +335,12 @@ Every data view has explicit **loading / error / empty** states (Tier 0).
 
 ## 12. Deferred / Future Work (README "what I'd do next")
 - SSE/WebSocket realtime notifications (currently poll).
-- Edit-this-occurrence vs edit-series recurrence exceptions.
 - Email/SMS notifications.
-- Postgres + managed hosting for persistence; CI (typecheck/lint/test).
+- Re-anchor occurrence exceptions when a series' rule changes (today they can orphan).
 - Real admin authentication + RBAC.
+
+**Now implemented** (post-MVP): CI (typecheck/lint/test); deployed on Render + Vercel;
+single-occurrence editing (reschedule / cancel / revert) — see §5a.
 
 ---
 

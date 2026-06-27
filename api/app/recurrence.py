@@ -10,6 +10,7 @@ All datetimes are expected to be timezone-aware (the app stores everything in
 UTC). ``until`` is an inclusive last *date* a recurrence may occur.
 """
 import calendar
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from .enums import Repeat
@@ -65,6 +66,53 @@ def expand_occurrences(
             break
 
     return occurrences
+
+
+@dataclass(frozen=True)
+class ExceptionData:
+    """A per-occurrence override, keyed externally by its original slot."""
+    cancelled: bool = False
+    provider: str | None = None
+    start_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Occurrence:
+    occurrence_start: datetime  # the original slot — stable identity for edits
+    effective_start: datetime   # where it actually lands (after any reschedule)
+    provider: str
+    cancelled: bool
+    overridden: bool
+
+
+def expand_with_exceptions(
+    start: datetime,
+    repeat: Repeat,
+    until: date | None,
+    provider: str,
+    exceptions: dict[datetime, ExceptionData],
+    window_start: datetime,
+    window_end: datetime,
+) -> list[Occurrence]:
+    """Expand a series, applying single-occurrence overrides.
+
+    Window membership is decided by each occurrence's *original* slot, so a
+    rescheduled occurrence still belongs to its original week/month. Cancelled
+    occurrences are returned with ``cancelled=True`` (callers that present a
+    read-only schedule, e.g. the portal, filter these out).
+    """
+    result: list[Occurrence] = []
+    for slot in expand_occurrences(start, repeat, until, window_start, window_end):
+        ex = exceptions.get(slot)
+        if ex is None:
+            result.append(Occurrence(slot, slot, provider, False, False))
+        elif ex.cancelled:
+            result.append(Occurrence(slot, slot, ex.provider or provider, True, True))
+        else:
+            result.append(
+                Occurrence(slot, ex.start_at or slot, ex.provider or provider, False, True)
+            )
+    return result
 
 
 def next_occurrence(

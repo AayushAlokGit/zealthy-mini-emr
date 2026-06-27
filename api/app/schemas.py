@@ -131,6 +131,26 @@ class AppointmentOccurrence(CamelModel):
     provider: str
     occurs_at: datetime
     repeat: Repeat
+    overridden: bool = False
+
+
+class AdminOccurrence(CamelModel):
+    """A single expanded occurrence for the EMR calendar, with edit identity."""
+    appointment_id: int
+    occurrence_start: datetime  # original slot — the id used to edit/revert
+    occurs_at: datetime         # effective time (after any reschedule)
+    provider: str
+    repeat: Repeat
+    cancelled: bool
+    overridden: bool
+
+
+class OccurrenceException(CamelModel):
+    """Upsert payload to override one occurrence of a recurring appointment."""
+    occurrence_start: datetime
+    cancelled: bool = False
+    provider: str | None = Field(default=None, max_length=200)
+    start_at: datetime | None = None
 
 
 class RefillOccurrence(CamelModel):

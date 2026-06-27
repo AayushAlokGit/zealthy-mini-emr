@@ -8,13 +8,14 @@ import { parseISO, format } from "date-fns";
 import { ArrowLeft, Pencil, Plus, Trash2, CalendarOff, CalendarDays } from "lucide-react";
 
 import { api, fetcher } from "@/lib/api";
-import type { Patient, Appointment, Prescription } from "@/lib/types";
+import type { Patient, Appointment, Prescription, AdminOccurrence } from "@/lib/types";
 import type { PatientForm as PatientValues } from "@/lib/schemas";
-import { formatDate, formatDateTime, repeatLabel } from "@/lib/format";
+import { formatDate, formatDateTime, formatTime, repeatLabel } from "@/lib/format";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { PatientForm } from "@/components/admin/PatientForm";
 import { AppointmentForm, type AppointmentPayload } from "@/components/admin/AppointmentForm";
 import { PrescriptionForm, type PrescriptionPayload } from "@/components/admin/PrescriptionForm";
+import { OccurrenceDialog } from "@/components/admin/OccurrenceDialog";
 import { Calendar, type CalendarEvent } from "@/components/Calendar";
 import { Card, Badge, Button } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/Modal";
@@ -129,30 +130,49 @@ function AppointmentsSection({
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [deleting, setDeleting] = useState<Appointment | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [editingOcc, setEditingOcc] = useState<AdminOccurrence | null>(null);
+
+  // The calendar shows expanded occurrences (with per-occurrence overrides);
+  // only fetched while the calendar is open.
+  const schedule = useSWR<AdminOccurrence[]>(
+    showCalendar ? `/api/patients/${patientId}/schedule` : null,
+    fetcher,
+  );
+
+  function refreshAll() {
+    mutate();
+    schedule.mutate();
+  }
 
   async function create(payload: AppointmentPayload) {
     await api.post(`/api/patients/${patientId}/appointments`, payload);
-    mutate();
+    refreshAll();
   }
   async function update(payload: AppointmentPayload) {
     if (!editing) return;
     await api.patch(`/api/appointments/${editing.id}`, payload);
-    mutate();
+    refreshAll();
   }
   async function endSeries(appt: Appointment) {
     await api.patch(`/api/appointments/${appt.id}`, { until: format(new Date(), "yyyy-MM-dd") });
-    mutate();
+    refreshAll();
   }
   async function remove() {
     if (!deleting) return;
     await api.del(`/api/appointments/${deleting.id}`);
     setDeleting(null);
-    mutate();
+    refreshAll();
   }
 
   const events: CalendarEvent[] =
-    data?.map((a) => ({ date: parseISO(a.startAt), title: a.provider, subtitle: repeatLabel(a.repeat), color: "teal" })) ??
-    [];
+    schedule.data?.map((o) => ({
+      date: parseISO(o.occursAt),
+      title: o.provider,
+      subtitle: `${formatTime(o.occursAt)}${o.cancelled ? " · cancelled" : o.overridden ? " · rescheduled" : ""}`,
+      color: "teal",
+      cancelled: o.cancelled,
+      payload: o,
+    })) ?? [];
 
   return (
     <Card className="mb-6">
@@ -177,7 +197,11 @@ function AppointmentsSection({
         ) : !data || data.length === 0 ? (
           <EmptyState title="No appointments" hint="Schedule the first one." />
         ) : showCalendar ? (
-          <Calendar events={events} />
+          schedule.isLoading ? (
+            <LoadingState />
+          ) : (
+            <Calendar events={events} onSelectEvent={(e) => setEditingOcc(e.payload as AdminOccurrence)} />
+          )
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.map((a) => (
@@ -207,6 +231,14 @@ function AppointmentsSection({
           </ul>
         )}
       </div>
+
+      {editingOcc && (
+        <OccurrenceDialog
+          occurrence={editingOcc}
+          onClose={() => setEditingOcc(null)}
+          onChanged={refreshAll}
+        />
+      )}
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="New appointment">
         <AppointmentForm onSubmit={create} onDone={() => setShowForm(false)} />

@@ -6,9 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from sqlalchemy.orm import selectinload
+
 from ..auth import get_current_patient
 from ..db import get_db
 from ..models import Appointment, Notification, Patient, Prescription
+from ..occurrences import expand_appointment
 from ..recurrence import add_months, expand_occurrences
 from ..schemas import (
     AppointmentOccurrence,
@@ -28,9 +31,9 @@ DRILLDOWN_MONTHS = 3
 def _active_appointments(db: Session, patient_id: int) -> list[Appointment]:
     return list(
         db.scalars(
-            select(Appointment).where(
-                Appointment.patient_id == patient_id, Appointment.deleted_at.is_(None)
-            )
+            select(Appointment)
+            .where(Appointment.patient_id == patient_id, Appointment.deleted_at.is_(None))
+            .options(selectinload(Appointment.exceptions))
         )
     )
 
@@ -50,10 +53,16 @@ def _expand_appointments(
 ) -> list[AppointmentOccurrence]:
     out: list[AppointmentOccurrence] = []
     for a in appts:
-        for occ in expand_occurrences(a.start_at, a.repeat, a.until, window_start, window_end):
+        for occ in expand_appointment(a, window_start, window_end):
+            if occ.cancelled:
+                continue  # patient view is read-only; cancelled occurrences are hidden
             out.append(
                 AppointmentOccurrence(
-                    appointment_id=a.id, provider=a.provider, occurs_at=occ, repeat=a.repeat
+                    appointment_id=a.id,
+                    provider=occ.provider,
+                    occurs_at=occ.effective_start,
+                    repeat=a.repeat,
+                    overridden=occ.overridden,
                 )
             )
     out.sort(key=lambda o: o.occurs_at)

@@ -71,7 +71,10 @@ function Appointments() {
                   <p className="text-sm font-medium text-slate-800">{a.provider}</p>
                   <p className="text-xs text-slate-500">{formatDateTime(a.occursAt)}</p>
                 </div>
-                <Badge color="teal">{repeatLabel(a.repeat)}</Badge>
+                <div className="flex items-center gap-2">
+                  {a.overridden && <Badge color="amber">Rescheduled</Badge>}
+                  <Badge color="teal">{repeatLabel(a.repeat)}</Badge>
+                </div>
               </li>
             ))}
           </ul>

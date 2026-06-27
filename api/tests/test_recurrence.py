@@ -4,7 +4,13 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from app.enums import Repeat
-from app.recurrence import add_months, expand_occurrences, next_occurrence
+from app.recurrence import (
+    ExceptionData,
+    add_months,
+    expand_occurrences,
+    expand_with_exceptions,
+    next_occurrence,
+)
 
 UTC = timezone.utc
 # A fixed reference offset matching the seed data (-07:00).
@@ -132,3 +138,52 @@ def test_next_occurrence_after_until_returns_none():
 def test_reversed_window_is_empty():
     start = dt(2026, 4, 1)
     assert expand_occurrences(start, Repeat.WEEKLY, None, dt(2026, 5, 1), dt(2026, 4, 1)) == []
+
+
+# --- expand_with_exceptions ---------------------------------------------
+
+def test_exceptions_passthrough_when_none():
+    start = dt(2026, 4, 1, 9, 0)
+    out = expand_with_exceptions(
+        start, Repeat.WEEKLY, None, "Dr A", {}, dt(2026, 4, 1), dt(2026, 4, 22)
+    )
+    assert [o.effective_start for o in out] == [
+        dt(2026, 4, 1, 9, 0),
+        dt(2026, 4, 8, 9, 0),
+        dt(2026, 4, 15, 9, 0),
+    ]
+    assert all(not o.overridden and not o.cancelled for o in out)
+
+
+def test_exception_reschedules_single_occurrence():
+    start = dt(2026, 4, 1, 9, 0)
+    moved = {dt(2026, 4, 8, 9, 0): ExceptionData(start_at=dt(2026, 4, 9, 14, 0))}
+    out = expand_with_exceptions(
+        start, Repeat.WEEKLY, None, "Dr A", moved, dt(2026, 4, 1), dt(2026, 4, 16)
+    )
+    by_slot = {o.occurrence_start: o for o in out}
+    # The Apr 8 slot now lands on Apr 9 14:00, flagged overridden; others untouched.
+    assert by_slot[dt(2026, 4, 8, 9, 0)].effective_start == dt(2026, 4, 9, 14, 0)
+    assert by_slot[dt(2026, 4, 8, 9, 0)].overridden is True
+    assert by_slot[dt(2026, 4, 1, 9, 0)].overridden is False
+
+
+def test_exception_overrides_provider():
+    start = dt(2026, 4, 1, 9, 0)
+    ex = {dt(2026, 4, 1, 9, 0): ExceptionData(provider="Dr Sub")}
+    out = expand_with_exceptions(
+        start, Repeat.WEEKLY, None, "Dr A", ex, dt(2026, 4, 1), dt(2026, 4, 2)
+    )
+    assert out[0].provider == "Dr Sub"
+
+
+def test_exception_cancels_single_occurrence():
+    start = dt(2026, 4, 1, 9, 0)
+    ex = {dt(2026, 4, 8, 9, 0): ExceptionData(cancelled=True)}
+    out = expand_with_exceptions(
+        start, Repeat.WEEKLY, None, "Dr A", ex, dt(2026, 4, 1), dt(2026, 4, 16)
+    )
+    cancelled = [o for o in out if o.cancelled]
+    assert len(cancelled) == 1 and cancelled[0].occurrence_start == dt(2026, 4, 8, 9, 0)
+    # The non-cancelled slots remain (a read-only consumer would filter the cancelled one).
+    assert sum(1 for o in out if not o.cancelled) == 2

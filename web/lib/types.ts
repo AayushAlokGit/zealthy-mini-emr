@@ -59,6 +59,24 @@ export interface AppointmentOccurrence {
   provider: string;
   occursAt: string;
   repeat: Repeat;
+  overridden: boolean;
+}
+
+export interface AdminOccurrence {
+  appointmentId: number;
+  occurrenceStart: string; // original slot — identity for editing/reverting
+  occursAt: string; // effective time (after any reschedule)
+  provider: string;
+  repeat: Repeat;
+  cancelled: boolean;
+  overridden: boolean;
+}
+
+export interface OccurrenceException {
+  occurrenceStart: string;
+  cancelled?: boolean;
+  provider?: string | null;
+  startAt?: string | null;
 }
 
 export interface RefillOccurrence {

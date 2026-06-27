@@ -1,4 +1,5 @@
 """End-to-end API tests covering the core EMR + portal flows."""
+from datetime import datetime, timedelta, timezone
 
 
 def _create_patient(client, email="alice@example.com", password="secret1"):
@@ -6,6 +7,17 @@ def _create_patient(client, email="alice@example.com", password="secret1"):
         "/api/patients",
         json={"name": "Alice", "email": email, "password": password},
     )
+
+
+def _future(days: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=days)).replace(microsecond=0).isoformat()
+
+
+def _recurring_appointment(client, pid):
+    return client.post(
+        f"/api/patients/{pid}/appointments",
+        json={"provider": "Dr Series", "startAt": _future(1), "repeat": "WEEKLY"},
+    ).json()
 
 
 def test_health(client):
@@ -95,3 +107,73 @@ def test_soft_delete_removes_from_list(client):
 
 def test_portal_requires_auth(client):
     assert client.get("/api/me/summary").status_code == 401
+
+
+# --- single-occurrence editing -------------------------------------------
+
+def test_reschedule_single_occurrence(client):
+    pid = _create_patient(client).json()["id"]
+    appt = _recurring_appointment(client, pid)
+    schedule = client.get(f"/api/patients/{pid}/schedule").json()
+    slot = schedule[0]["occurrenceStart"]
+    moved = _future(2)
+
+    res = client.put(
+        f"/api/appointments/{appt['id']}/exceptions",
+        json={"occurrenceStart": slot, "startAt": moved, "provider": "Dr Sub"},
+    )
+    assert res.status_code == 204
+
+    after = {o["occurrenceStart"]: o for o in client.get(f"/api/patients/{pid}/schedule").json()}
+    assert after[slot]["overridden"] is True
+    assert after[slot]["provider"] == "Dr Sub"
+    assert after[slot]["occursAt"][:19] == moved[:19]
+
+
+def test_cancel_single_occurrence_hidden_from_portal(client):
+    pid = _create_patient(client).json()["id"]
+    appt = _recurring_appointment(client, pid)
+    slot = client.get(f"/api/patients/{pid}/schedule").json()[0]["occurrenceStart"]
+
+    client.put(
+        f"/api/appointments/{appt['id']}/exceptions",
+        json={"occurrenceStart": slot, "cancelled": True},
+    )
+
+    # EMR still shows it (flagged cancelled) so an admin can revert it...
+    emr = {o["occurrenceStart"]: o for o in client.get(f"/api/patients/{pid}/schedule").json()}
+    assert emr[slot]["cancelled"] is True
+
+    # ...but the patient-facing schedule omits it entirely.
+    client.post("/api/auth/login", json={"email": "alice@example.com", "password": "secret1"})
+    portal = client.get("/api/me/appointments").json()
+    assert all(o["occursAt"] != emr[slot]["occursAt"] for o in portal)
+
+
+def test_revert_single_occurrence(client):
+    pid = _create_patient(client).json()["id"]
+    appt = _recurring_appointment(client, pid)
+    slot = client.get(f"/api/patients/{pid}/schedule").json()[0]["occurrenceStart"]
+    client.put(
+        f"/api/appointments/{appt['id']}/exceptions",
+        json={"occurrenceStart": slot, "provider": "Dr Sub"},
+    )
+
+    res = client.request("DELETE", f"/api/appointments/{appt['id']}/exceptions", params={"at": slot})
+    assert res.status_code == 204
+    after = {o["occurrenceStart"]: o for o in client.get(f"/api/patients/{pid}/schedule").json()}
+    assert after[slot]["overridden"] is False
+    assert after[slot]["provider"] == "Dr Series"
+
+
+def test_cannot_edit_occurrence_of_one_time_appointment(client):
+    pid = _create_patient(client).json()["id"]
+    appt = client.post(
+        f"/api/patients/{pid}/appointments",
+        json={"provider": "Dr Once", "startAt": _future(1), "repeat": "NONE"},
+    ).json()
+    res = client.put(
+        f"/api/appointments/{appt['id']}/exceptions",
+        json={"occurrenceStart": _future(1), "cancelled": True},
+    )
+    assert res.status_code == 422

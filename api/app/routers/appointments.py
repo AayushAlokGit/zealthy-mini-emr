@@ -7,9 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..enums import NotificationType
-from ..models import Appointment, Patient
-from ..schemas import AppointmentCreate, AppointmentOut, AppointmentUpdate
+from ..enums import NotificationType, Repeat
+from ..models import Appointment, AppointmentException, Patient
+from ..schemas import (
+    AppointmentCreate,
+    AppointmentOut,
+    AppointmentUpdate,
+    OccurrenceException,
+)
 from ..services import emit_notification, record_audit
 
 router = APIRouter(prefix="/api", tags=["appointments"])
@@ -86,6 +91,76 @@ def update_appointment(
     db.commit()
     db.refresh(appt)
     return appt
+
+
+@router.put(
+    "/appointments/{appointment_id}/exceptions",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def upsert_exception(
+    appointment_id: int, body: OccurrenceException, db: Session = Depends(get_db)
+):
+    """Override a single occurrence: reschedule (start_at/provider) or cancel it."""
+    appt = _get_appointment(db, appointment_id)
+    if appt.repeat == Repeat.NONE:
+        raise HTTPException(422, "Only recurring appointments have occurrences to edit")
+
+    existing = db.scalar(
+        select(AppointmentException).where(
+            AppointmentException.appointment_id == appt.id,
+            AppointmentException.occurrence_start == body.occurrence_start,
+        )
+    )
+    if existing is None:
+        existing = AppointmentException(
+            appointment_id=appt.id, occurrence_start=body.occurrence_start
+        )
+        db.add(existing)
+    existing.cancelled = body.cancelled
+    existing.provider = body.provider
+    existing.start_at = body.start_at
+
+    when = f"{body.occurrence_start:%b %d, %Y}"
+    if body.cancelled:
+        msg = f"Your {when} appointment with {appt.provider} was cancelled."
+        ntype = NotificationType.APPT_CANCELLED
+    elif body.start_at is not None:
+        msg = (
+            f"Your {when} appointment with {existing.provider or appt.provider} "
+            f"was moved to {body.start_at:%b %d, %Y at %I:%M %p} UTC."
+        )
+        ntype = NotificationType.APPT_UPDATED
+    else:
+        msg = f"Your {when} appointment was updated."
+        ntype = NotificationType.APPT_UPDATED
+
+    emit_notification(db, appt.patient_id, ntype, msg, appt.id)
+    record_audit(db, "appointment", appt.id, "UPDATE", f"Occurrence {when}: {msg}")
+    db.commit()
+
+
+@router.delete(
+    "/appointments/{appointment_id}/exceptions",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def revert_exception(
+    appointment_id: int, at: datetime, db: Session = Depends(get_db)
+):
+    """Revert a single occurrence back to the series rule (delete its override)."""
+    appt = _get_appointment(db, appointment_id)
+    existing = db.scalar(
+        select(AppointmentException).where(
+            AppointmentException.appointment_id == appt.id,
+            AppointmentException.occurrence_start == at,
+        )
+    )
+    if existing is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No override for that occurrence")
+    db.delete(existing)
+    record_audit(
+        db, "appointment", appt.id, "UPDATE", f"Occurrence {at:%b %d, %Y} reverted to series"
+    )
+    db.commit()
 
 
 @router.delete("/appointments/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
