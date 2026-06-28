@@ -306,9 +306,21 @@ function AppointmentsSection({ patientId }: { patientId: string }) {
       <Modal open={showForm} onClose={() => setShowForm(false)} title="New appointment">
         <AppointmentForm onSubmit={create} onDone={() => setShowForm(false)} />
       </Modal>
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit appointment">
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title={editing && editing.repeat !== "NONE" ? "Edit appointment series" : "Edit appointment"}
+      >
         {editing && (
-          <AppointmentForm existing={editing} onSubmit={update} onDone={() => setEditing(null)} />
+          <>
+            {editing.repeat !== "NONE" && (
+              <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                These changes apply to the whole series — every occurrence. To change a single
+                date, close this and click that date in the Calendar.
+              </p>
+            )}
+            <AppointmentForm existing={editing} onSubmit={update} onDone={() => setEditing(null)} />
+          </>
         )}
       </Modal>
       <ConfirmModal
@@ -482,9 +494,25 @@ function PrescriptionsSection({ patientId }: { patientId: string }) {
       <Modal open={showForm} onClose={() => setShowForm(false)} title="New prescription">
         <PrescriptionForm onSubmit={create} onDone={() => setShowForm(false)} />
       </Modal>
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit prescription">
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title={
+          editing && editing.refillSchedule !== "NONE"
+            ? "Edit prescription series"
+            : "Edit prescription"
+        }
+      >
         {editing && (
-          <PrescriptionForm existing={editing} onSubmit={update} onDone={() => setEditing(null)} />
+          <>
+            {editing.refillSchedule !== "NONE" && (
+              <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                These changes apply to the whole series — every refill. To change a single refill,
+                close this and click that date in the Refill calendar.
+              </p>
+            )}
+            <PrescriptionForm existing={editing} onSubmit={update} onDone={() => setEditing(null)} />
+          </>
         )}
       </Modal>
       <ConfirmModal
