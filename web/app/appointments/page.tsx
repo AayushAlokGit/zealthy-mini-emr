@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { parseISO } from "date-fns";
 import { CalendarDays, List } from "lucide-react";
 
-import { api } from "@/lib/api";
 import type { AppointmentOccurrence } from "@/lib/types";
+import { useApi } from "@/lib/useApi";
 import { formatDateTime, repeatLabel } from "@/lib/format";
 import { PortalShell } from "@/components/portal/PortalShell";
 import { Calendar, type CalendarEvent } from "@/components/Calendar";
@@ -23,31 +23,7 @@ export default function AppointmentsPage() {
 
 function Appointments() {
   const [view, setView] = useState<"list" | "calendar">("list");
-  const [data, setData] = useState<AppointmentOccurrence[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const list = await api.get<AppointmentOccurrence[]>("/api/me/appointments");
-        if (!cancelled) {
-          setData(list);
-          setError(false);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
+  const { data, loading, error, reload } = useApi<AppointmentOccurrence[]>("/api/me/appointments");
 
   const events: CalendarEvent[] =
     data?.map((a) => ({
@@ -78,7 +54,7 @@ function Appointments() {
         {loading ? (
           <LoadingState />
         ) : error ? (
-          <ErrorState message="Could not load appointments." onRetry={() => setReloadKey((k) => k + 1)} />
+          <ErrorState message="Could not load appointments." onRetry={reload} />
         ) : !data || data.length === 0 ? (
           <EmptyState title="No upcoming appointments" hint="Your provider will schedule these for you." />
         ) : view === "calendar" ? (

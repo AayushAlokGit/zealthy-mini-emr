@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, Pill, User, ArrowRight } from "lucide-react";
 
-import { api } from "@/lib/api";
 import type { PortalSummary } from "@/lib/types";
+import { useApi } from "@/lib/useApi";
+import { usePatient } from "@/lib/PatientContext";
 import { formatDate, formatDateTime, repeatLabel } from "@/lib/format";
 import { PortalShell } from "@/components/portal/PortalShell";
 import { Card, Badge } from "@/components/ui/primitives";
@@ -20,37 +20,14 @@ export default function DashboardPage() {
 }
 
 function Dashboard() {
-  const [data, setData] = useState<PortalSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const summary = await api.get<PortalSummary>("/api/me/summary");
-        if (!cancelled) {
-          setData(summary);
-          setError(false);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
+  const patient = usePatient();
+  const { data, loading, error, reload } = useApi<PortalSummary>("/api/me/summary");
 
   if (loading) return <LoadingState />;
-  if (error) return <ErrorState message="Could not load your summary." onRetry={() => setReloadKey((k) => k + 1)} />;
+  if (error) return <ErrorState message="Could not load your summary." onRetry={reload} />;
   if (!data) return null;
 
-  const { patient, upcomingAppointments, upcomingRefills } = data;
+  const { upcomingAppointments, upcomingRefills } = data;
 
   return (
     <div className="space-y-6">

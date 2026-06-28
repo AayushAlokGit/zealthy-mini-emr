@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, UserPlus, ChevronRight, ArrowUpDown } from "lucide-react";
 
-import { api } from "@/lib/api";
 import type { PatientListItem } from "@/lib/types";
+import { useApi } from "@/lib/useApi";
 import { formatDateTime } from "@/lib/format";
 import { AdminHeader } from "@/components/admin/AdminHeader";
 import { Card, Badge, Button } from "@/components/ui/primitives";
@@ -15,33 +15,9 @@ import { LoadingState, ErrorState, EmptyState } from "@/components/ui/feedback";
 type SortKey = "name" | "appointmentCount" | "prescriptionCount";
 
 export default function AdminPatientsPage() {
-  const [data, setData] = useState<PatientListItem[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, loading, error, reload } = useApi<PatientListItem[]>("/api/patients");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("name");
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const list = await api.get<PatientListItem[]>("/api/patients");
-        if (!cancelled) {
-          setData(list);
-          setError(false);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -100,7 +76,7 @@ export default function AdminPatientsPage() {
           {loading ? (
             <LoadingState />
           ) : error ? (
-            <ErrorState message="Could not load patients. Is the API running?" onRetry={() => setReloadKey((k) => k + 1)} />
+            <ErrorState message="Could not load patients. Is the API running?" onRetry={reload} />
           ) : rows.length === 0 ? (
             <EmptyState title={query ? "No patients match your search" : "No patients yet"} />
           ) : (

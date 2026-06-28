@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { parseISO, format } from "date-fns";
 import { ArrowLeft, Pencil, Plus, Trash2, CalendarOff, CalendarDays, Info } from "lucide-react";
 
 import { api } from "@/lib/api";
+import { useApi } from "@/lib/useApi";
 import type {
   Patient,
   Appointment,
@@ -31,32 +32,8 @@ export default function PatientDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data: patient, loading, error, reload } = useApi<Patient>(`/api/patients/${id}`);
   const [editingPatient, setEditingPatient] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const p = await api.get<Patient>(`/api/patients/${id}`);
-        if (!cancelled) {
-          setPatient(p);
-          setError(false);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, reloadKey]);
 
   async function updatePatient(values: PatientFormValues) {
     await api.patch(`/api/patients/${id}`, {
@@ -67,7 +44,7 @@ export default function PatientDetailPage() {
       ...(values.password ? { password: values.password } : {}),
     });
     setEditingPatient(false);
-    setReloadKey((k) => k + 1);
+    reload();
   }
 
   if (loading) {
@@ -141,10 +118,12 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function AppointmentsSection({ patientId }: { patientId: string }) {
-  const [data, setData] = useState<Appointment[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const {
+    data,
+    loading,
+    error,
+    reload: reloadList,
+  } = useApi<Appointment[]>(`/api/patients/${patientId}/appointments`);
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Appointment | null>(null);
@@ -152,49 +131,15 @@ function AppointmentsSection({ patientId }: { patientId: string }) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingOcc, setEditingOcc] = useState<AdminOccurrence | null>(null);
 
-  const [schedule, setSchedule] = useState<AdminOccurrence[] | null>(null);
+  // Lazily loaded only while the calendar is open (path is null otherwise).
+  const { data: schedule, reload: reloadSchedule } = useApi<AdminOccurrence[]>(
+    showCalendar ? `/api/patients/${patientId}/schedule` : null,
+  );
   const scheduleLoading = showCalendar && schedule === null;
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const list = await api.get<Appointment[]>(`/api/patients/${patientId}/appointments`);
-        if (!cancelled) {
-          setData(list);
-          setError(false);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [patientId, reloadKey]);
-
-  useEffect(() => {
-    if (!showCalendar) return;
-    let cancelled = false;
-    async function load() {
-      try {
-        const occ = await api.get<AdminOccurrence[]>(`/api/patients/${patientId}/schedule`);
-        if (!cancelled) setSchedule(occ);
-      } catch {
-        // schedule is best-effort; the list view remains usable
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [patientId, showCalendar, reloadKey]);
-
   function refreshAll() {
-    setReloadKey((k) => k + 1);
+    reloadList();
+    reloadSchedule();
   }
 
   async function create(payload: AppointmentPayload) {
@@ -335,10 +280,12 @@ function AppointmentsSection({ patientId }: { patientId: string }) {
 }
 
 function PrescriptionsSection({ patientId }: { patientId: string }) {
-  const [data, setData] = useState<Prescription[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const {
+    data,
+    loading,
+    error,
+    reload: reloadList,
+  } = useApi<Prescription[]>(`/api/patients/${patientId}/prescriptions`);
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Prescription | null>(null);
@@ -346,49 +293,15 @@ function PrescriptionsSection({ patientId }: { patientId: string }) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingOcc, setEditingOcc] = useState<AdminRefillOccurrence | null>(null);
 
-  const [schedule, setSchedule] = useState<AdminRefillOccurrence[] | null>(null);
+  // Lazily loaded only while the refill calendar is open.
+  const { data: schedule, reload: reloadSchedule } = useApi<AdminRefillOccurrence[]>(
+    showCalendar ? `/api/patients/${patientId}/refill-schedule` : null,
+  );
   const scheduleLoading = showCalendar && schedule === null;
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const list = await api.get<Prescription[]>(`/api/patients/${patientId}/prescriptions`);
-        if (!cancelled) {
-          setData(list);
-          setError(false);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [patientId, reloadKey]);
-
-  useEffect(() => {
-    if (!showCalendar) return;
-    let cancelled = false;
-    async function load() {
-      try {
-        const occ = await api.get<AdminRefillOccurrence[]>(`/api/patients/${patientId}/refill-schedule`);
-        if (!cancelled) setSchedule(occ);
-      } catch {
-        // schedule is best-effort; the list view remains usable
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [patientId, showCalendar, reloadKey]);
-
   function refreshAll() {
-    setReloadKey((k) => k + 1);
+    reloadList();
+    reloadSchedule();
   }
 
   async function create(payload: PrescriptionPayload) {

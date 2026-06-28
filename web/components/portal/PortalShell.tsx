@@ -1,12 +1,15 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { HeartPulse, LogOut } from "lucide-react";
 
 import { api } from "@/lib/api";
 import type { Patient } from "@/lib/types";
+import { useApi } from "@/lib/useApi";
+import { PatientProvider } from "@/lib/PatientContext";
+import { NotificationsProvider } from "@/lib/NotificationsContext";
 import { LoadingState } from "@/components/ui/feedback";
 import { cn } from "@/components/ui/cn";
 import { NotificationBell } from "./NotificationBell";
@@ -20,27 +23,11 @@ const tabs = [
 export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: patient, loading, error } = useApi<Patient>("/api/auth/me");
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const me = await api.get<Patient>("/api/auth/me");
-        if (!cancelled) {
-          setPatient(me);
-          setLoading(false);
-        }
-      } catch {
-        if (!cancelled) router.replace("/");
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+    if (error) router.replace("/");
+  }, [error, router]);
 
   async function logout() {
     await api.post("/api/auth/logout");
@@ -51,7 +38,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
   if (!patient) return <LoadingState label="Redirecting to sign in…" />;
 
   return (
-    <div className="min-h-screen">
+    <PatientProvider patient={patient}>
+      <NotificationsProvider>
+        <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
@@ -93,6 +82,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
-    </div>
+        </div>
+      </NotificationsProvider>
+    </PatientProvider>
   );
 }

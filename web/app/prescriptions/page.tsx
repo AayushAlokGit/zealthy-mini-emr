@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { parseISO } from "date-fns";
 import { CalendarDays, List, Pill } from "lucide-react";
 
-import { api } from "@/lib/api";
 import type { Prescription, RefillOccurrence } from "@/lib/types";
+import { useApi } from "@/lib/useApi";
 import { formatDate, repeatLabel } from "@/lib/format";
 import { PortalShell } from "@/components/portal/PortalShell";
 import { Calendar, type CalendarEvent } from "@/components/Calendar";
@@ -23,55 +23,20 @@ export default function PrescriptionsPage() {
 
 function Prescriptions() {
   const [view, setView] = useState<"list" | "calendar">("list");
-  const [reloadKey, setReloadKey] = useState(0);
 
-  const [rx, setRx] = useState<Prescription[] | null>(null);
-  const [rxLoading, setRxLoading] = useState(true);
-  const [rxError, setRxError] = useState(false);
+  const {
+    data: rx,
+    loading: rxLoading,
+    error: rxError,
+    reload: reloadRx,
+  } = useApi<Prescription[]>("/api/me/prescriptions");
 
-  const [refills, setRefills] = useState<RefillOccurrence[] | null>(null);
-  const [refillsLoading, setRefillsLoading] = useState(true);
-  const [refillsError, setRefillsError] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadRx() {
-      try {
-        const list = await api.get<Prescription[]>("/api/me/prescriptions");
-        if (!cancelled) {
-          setRx(list);
-          setRxError(false);
-        }
-      } catch {
-        if (!cancelled) setRxError(true);
-      } finally {
-        if (!cancelled) setRxLoading(false);
-      }
-    }
-
-    async function loadRefills() {
-      try {
-        const list = await api.get<RefillOccurrence[]>("/api/me/refills");
-        if (!cancelled) {
-          setRefills(list);
-          setRefillsError(false);
-        }
-      } catch {
-        if (!cancelled) setRefillsError(true);
-      } finally {
-        if (!cancelled) setRefillsLoading(false);
-      }
-    }
-
-    loadRx();
-    loadRefills();
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const reload = () => setReloadKey((k) => k + 1);
+  const {
+    data: refills,
+    loading: refillsLoading,
+    error: refillsError,
+    reload: reloadRefills,
+  } = useApi<RefillOccurrence[]>("/api/me/refills");
 
   const events: CalendarEvent[] =
     refills?.map((r) => ({
@@ -95,7 +60,7 @@ function Prescriptions() {
         {rxLoading ? (
           <LoadingState />
         ) : rxError ? (
-          <ErrorState message="Could not load prescriptions." onRetry={reload} />
+          <ErrorState message="Could not load prescriptions." onRetry={reloadRx} />
         ) : !rx || rx.length === 0 ? (
           <EmptyState title="No prescriptions on file" />
         ) : (
@@ -141,7 +106,7 @@ function Prescriptions() {
         {refillsLoading ? (
           <LoadingState />
         ) : refillsError ? (
-          <ErrorState message="Could not load refills." onRetry={reload} />
+          <ErrorState message="Could not load refills." onRetry={reloadRefills} />
         ) : !refills || refills.length === 0 ? (
           <EmptyState title="No refills scheduled" />
         ) : view === "calendar" ? (
