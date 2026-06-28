@@ -13,7 +13,7 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, MousePointerClick } from "lucide-react";
 import { cn } from "./ui/cn";
 
 export interface CalendarEvent {
@@ -56,7 +56,14 @@ export function Calendar({
   const selectedEvents = selected ? byDay.get(dayKey(selected)) ?? [] : [];
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
+    <div className="space-y-4">
+      {onSelectEvent && (
+        <p className="flex items-center gap-1.5 rounded-lg bg-teal-50/60 px-3 py-2 text-xs text-teal-700">
+          <MousePointerClick className="h-3.5 w-3.5 shrink-0" />
+          Click a highlighted date, then an occurrence to reschedule, cancel, or restore just that one.
+        </p>
+      )}
+      <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700">{format(cursor, "MMMM yyyy")}</h3>
@@ -168,6 +175,7 @@ export function Calendar({
         {onSelectEvent && selectedEvents.length > 0 && (
           <p className="mt-3 text-[11px] text-slate-400">Click an appointment to edit that occurrence.</p>
         )}
+      </div>
       </div>
     </div>
   );

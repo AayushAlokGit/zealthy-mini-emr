@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { parseISO, format } from "date-fns";
-import { ArrowLeft, Pencil, Plus, Trash2, CalendarOff, CalendarDays } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2, CalendarOff, CalendarDays, Info } from "lucide-react";
 
 import { api } from "@/lib/api";
 import type {
@@ -256,32 +256,42 @@ function AppointmentsSection({ patientId }: { patientId: string }) {
             <Calendar events={events} onSelectEvent={(e) => setEditingOcc(e.payload as AdminOccurrence)} />
           )
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {data.map((a) => (
-              <li key={a.id} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{a.provider}</p>
-                  <p className="text-xs text-slate-500">
-                    {formatDateTime(a.startAt)} · {repeatLabel(a.repeat)}
-                    {a.until && ` · ends ${formatDate(a.until)}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  {a.repeat !== "NONE" && !a.until && (
-                    <Button variant="ghost" onClick={() => endSeries(a)} title="End recurrence">
-                      <CalendarOff className="h-4 w-4" /> End series
-                    </Button>
-                  )}
-                  <IconBtn label="Edit" onClick={() => setEditing(a)}>
-                    <Pencil className="h-4 w-4" />
-                  </IconBtn>
-                  <IconBtn label="Delete" danger onClick={() => setDeleting(a)}>
-                    <Trash2 className="h-4 w-4" />
-                  </IconBtn>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <>
+            <OccurrenceHint
+              show={data.some((a) => a.repeat !== "NONE")}
+              onOpenCalendar={() => setShowCalendar(true)}
+              kind="appointment"
+            />
+            <ul className="divide-y divide-slate-100">
+              {data.map((a) => (
+                <li key={a.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{a.provider}</p>
+                    <p className="text-xs text-slate-500">
+                      {formatDateTime(a.startAt)} · {repeatLabel(a.repeat)}
+                      {a.until && ` · ends ${formatDate(a.until)}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {a.repeat !== "NONE" && !a.until && (
+                      <Button variant="ghost" onClick={() => endSeries(a)} title="End recurrence">
+                        <CalendarOff className="h-4 w-4" /> End series
+                      </Button>
+                    )}
+                    <IconBtn
+                      label={a.repeat !== "NONE" ? "Edit series" : "Edit"}
+                      onClick={() => setEditing(a)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </IconBtn>
+                    <IconBtn label="Delete" danger onClick={() => setDeleting(a)}>
+                      <Trash2 className="h-4 w-4" />
+                    </IconBtn>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
 
@@ -424,29 +434,40 @@ function PrescriptionsSection({ patientId }: { patientId: string }) {
             <Calendar events={events} onSelectEvent={(e) => setEditingOcc(e.payload as AdminRefillOccurrence)} />
           )
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {data.map((r) => (
-              <li key={r.id} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">
-                    {r.medication} <Badge>{r.dosage}</Badge>
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Qty {r.quantity} · {repeatLabel(r.refillSchedule)} · next {formatDate(r.refillOn)}
-                    {r.until && ` · ends ${formatDate(r.until)}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <IconBtn label="Edit" onClick={() => setEditing(r)}>
-                    <Pencil className="h-4 w-4" />
-                  </IconBtn>
-                  <IconBtn label="Delete" danger onClick={() => setDeleting(r)}>
-                    <Trash2 className="h-4 w-4" />
-                  </IconBtn>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <>
+            <OccurrenceHint
+              show={data.some((r) => r.refillSchedule !== "NONE")}
+              onOpenCalendar={() => setShowCalendar(true)}
+              kind="refill"
+            />
+            <ul className="divide-y divide-slate-100">
+              {data.map((r) => (
+                <li key={r.id} className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">
+                      {r.medication} <Badge>{r.dosage}</Badge>
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Qty {r.quantity} · {repeatLabel(r.refillSchedule)}
+                      {r.nextRefillOn ? ` · next ${formatDate(r.nextRefillOn)}` : " · no upcoming refills"}
+                      {r.until && ` · ends ${formatDate(r.until)}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <IconBtn
+                      label={r.refillSchedule !== "NONE" ? "Edit series" : "Edit"}
+                      onClick={() => setEditing(r)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </IconBtn>
+                    <IconBtn label="Delete" danger onClick={() => setDeleting(r)}>
+                      <Trash2 className="h-4 w-4" />
+                    </IconBtn>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
 
@@ -502,6 +523,39 @@ function SectionBar({
           <Plus className="h-4 w-4" /> {addLabel}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function OccurrenceHint({
+  show,
+  onOpenCalendar,
+  kind,
+}: {
+  show: boolean;
+  onOpenCalendar: () => void;
+  kind: "appointment" | "refill";
+}) {
+  if (!show) return null;
+  const calendarLabel = kind === "appointment" ? "Calendar" : "Refill calendar";
+  const action =
+    kind === "appointment"
+      ? "reschedule or cancel a single appointment"
+      : "adjust or skip a single refill";
+  return (
+    <div className="mb-3 flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+      <span>
+        Editing a row changes the whole series. To {action}, open the{" "}
+        <button
+          type="button"
+          onClick={onOpenCalendar}
+          className="font-medium text-teal-600 hover:underline"
+        >
+          {calendarLabel}
+        </button>{" "}
+        and click that date.
+      </span>
     </div>
   );
 }
