@@ -77,3 +77,23 @@ def expand_prescription(
             RefillOccurrence(s.original.date(), s.effective.date(), quantity, s.cancelled, s.overridden)
         )
     return out
+
+
+def next_refill_date(rx: Prescription, ref: date) -> date | None:
+    """Soonest upcoming refill on/after `ref`, honoring exceptions.
+
+    The stored `refill_on` is only the *first* refill; for a recurring series it
+    drifts into the past. This returns the next refill the patient will actually
+    see — skipping cancelled occurrences and following rescheduled ones.
+    """
+    ref_dt = _midnight(ref)
+    if not rx.exceptions:
+        nxt = next_occurrence(_midnight(rx.refill_on), rx.refill_schedule, rx.until, ref_dt)
+        return nxt.date() if nxt else None
+
+    upcoming = [
+        occ.refill_on
+        for occ in expand_prescription(rx, ref_dt, add_months(ref_dt, 12))
+        if not occ.cancelled and occ.refill_on >= ref
+    ]
+    return min(upcoming) if upcoming else None

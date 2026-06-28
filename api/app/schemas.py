@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from pydantic.alias_generators import to_camel
 
 from .enums import NotificationType, Repeat
@@ -61,12 +61,28 @@ class AppointmentCreate(CamelModel):
     repeat: Repeat = Repeat.NONE
     until: date | None = None
 
+    @model_validator(mode="after")
+    def _until_after_start(self):
+        if self.until is not None and self.until < self.start_at.date():
+            raise ValueError("End date must be on or after the first appointment")
+        return self
+
 
 class AppointmentUpdate(CamelModel):
     provider: str | None = Field(default=None, min_length=1, max_length=200)
     start_at: datetime | None = None
     repeat: Repeat | None = None
     until: date | None = None
+
+    @model_validator(mode="after")
+    def _until_after_start(self):
+        if (
+            self.until is not None
+            and self.start_at is not None
+            and self.until < self.start_at.date()
+        ):
+            raise ValueError("End date must be on or after the first appointment")
+        return self
 
 
 class AppointmentOut(CamelModel):
@@ -87,6 +103,12 @@ class PrescriptionCreate(CamelModel):
     refill_schedule: Repeat = Repeat.MONTHLY
     until: date | None = None
 
+    @model_validator(mode="after")
+    def _until_after_start(self):
+        if self.until is not None and self.until < self.refill_on:
+            raise ValueError("End date must be on or after the first refill")
+        return self
+
 
 class PrescriptionUpdate(CamelModel):
     medication: str | None = None
@@ -95,6 +117,16 @@ class PrescriptionUpdate(CamelModel):
     refill_on: date | None = None
     refill_schedule: Repeat | None = None
     until: date | None = None
+
+    @model_validator(mode="after")
+    def _until_after_start(self):
+        if (
+            self.until is not None
+            and self.refill_on is not None
+            and self.until < self.refill_on
+        ):
+            raise ValueError("End date must be on or after the first refill")
+        return self
 
 
 class PrescriptionOut(CamelModel):
@@ -107,6 +139,10 @@ class PrescriptionOut(CamelModel):
     refill_schedule: Repeat
     until: date | None
     created_at: datetime
+
+
+class PrescriptionWithNext(PrescriptionOut):
+    next_refill_on: date | None = None  # computed soonest upcoming refill
 
 
 class AppointmentOccurrence(CamelModel):

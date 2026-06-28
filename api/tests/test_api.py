@@ -16,6 +16,10 @@ def _future_date(days: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(days=days)).date().isoformat()
 
 
+def _past_date(days: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+
+
 def _recurring_appointment(client, pid):
     return client.post(
         f"/api/patients/{pid}/appointments",
@@ -230,6 +234,70 @@ def test_next_appointment_reflects_rescheduled_occurrence(client):
 
     listed = {p["id"]: p for p in client.get("/api/patients").json()}[pid]
     assert listed["nextAppointment"][:19] == moved[:19]
+
+
+def test_next_refill_is_upcoming_not_stored_first_refill(client):
+    pid = _create_patient(client).json()["id"]
+    client.post(
+        f"/api/patients/{pid}/prescriptions",
+        json={
+            "medication": "Prozac",
+            "dosage": "10mg",
+            "quantity": 1,
+            "refillOn": _past_date(40),  # first refill well in the past
+            "refillSchedule": "MONTHLY",
+        },
+    )
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    listed = client.get(f"/api/patients/{pid}/prescriptions").json()[0]
+    assert listed["refillOn"] == _past_date(40)  # raw value untouched
+    assert listed["nextRefillOn"] >= today  # computed next refill is upcoming
+
+    client.post("/api/auth/login", json={"email": "alice@example.com", "password": "secret1"})
+    portal = client.get("/api/me/prescriptions").json()[0]
+    assert portal["nextRefillOn"] >= today
+
+
+def test_one_time_past_refill_has_no_next(client):
+    pid = _create_patient(client).json()["id"]
+    client.post(
+        f"/api/patients/{pid}/prescriptions",
+        json={
+            "medication": "Prozac",
+            "dosage": "10mg",
+            "quantity": 1,
+            "refillOn": _past_date(10),
+            "refillSchedule": "NONE",
+        },
+    )
+    listed = client.get(f"/api/patients/{pid}/prescriptions").json()[0]
+    assert listed["nextRefillOn"] is None
+
+
+def test_appointment_until_before_start_rejected(client):
+    pid = _create_patient(client).json()["id"]
+    res = client.post(
+        f"/api/patients/{pid}/appointments",
+        json={"provider": "Dr X", "startAt": _future(10), "repeat": "WEEKLY", "until": _future_date(2)},
+    )
+    assert res.status_code == 422
+
+
+def test_prescription_until_before_start_rejected(client):
+    pid = _create_patient(client).json()["id"]
+    res = client.post(
+        f"/api/patients/{pid}/prescriptions",
+        json={
+            "medication": "Prozac",
+            "dosage": "10mg",
+            "quantity": 1,
+            "refillOn": _future_date(10),
+            "refillSchedule": "MONTHLY",
+            "until": _future_date(2),
+        },
+    )
+    assert res.status_code == 422
 
 
 def test_reschedule_single_refill(client):

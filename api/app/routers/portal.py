@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -8,14 +8,14 @@ from ..auth import get_current_patient
 from ..db import get_db
 from ..logging_setup import get_logger
 from ..models import Appointment, Notification, Patient, Prescription
-from ..occurrences import expand_appointment, expand_prescription
+from ..occurrences import expand_appointment, expand_prescription, next_refill_date
 from ..recurrence import add_months
 from ..schemas import (
     AppointmentOccurrence,
     NotificationList,
     NotificationOut,
     PortalSummary,
-    PrescriptionOut,
+    PrescriptionWithNext,
     RefillOccurrence,
 )
 
@@ -44,6 +44,12 @@ def _active_prescriptions(db: Session, patient_id: int) -> list[Prescription]:
             .options(selectinload(Prescription.exceptions))
         )
     )
+
+
+def _with_next_refill(rx: Prescription, today: date) -> PrescriptionWithNext:
+    item = PrescriptionWithNext.model_validate(rx)
+    item.next_refill_on = next_refill_date(rx, today)
+    return item
 
 
 def _expand_appointments(
@@ -129,11 +135,13 @@ def my_appointments(
     return _expand_appointments(_active_appointments(db, patient.id), now, window_end)
 
 
-@router.get("/prescriptions", response_model=list[PrescriptionOut])
+@router.get("/prescriptions", response_model=list[PrescriptionWithNext])
 def my_prescriptions(
     patient: Patient = Depends(get_current_patient), db: Session = Depends(get_db)
 ):
-    return sorted(_active_prescriptions(db, patient.id), key=lambda r: r.refill_on)
+    today = datetime.now(timezone.utc).date()
+    rxs = sorted(_active_prescriptions(db, patient.id), key=lambda r: r.refill_on)
+    return [_with_next_refill(r, today) for r in rxs]
 
 
 @router.get("/refills", response_model=list[RefillOccurrence])

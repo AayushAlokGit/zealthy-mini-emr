@@ -112,7 +112,10 @@ function Prescriptions() {
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <Detail label="Quantity" value={String(p.quantity)} />
                   <Detail label="Schedule" value={repeatLabel(p.refillSchedule)} />
-                  <Detail label="Next refill" value={formatDate(p.refillOn)} />
+                  <Detail
+                    label="Next refill"
+                    value={p.nextRefillOn ? formatDate(p.nextRefillOn) : "None upcoming"}
+                  />
                   <Detail label="Ends" value={p.until ? formatDate(p.until) : "Ongoing"} />
                 </dl>
               </div>

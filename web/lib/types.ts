@@ -48,6 +48,8 @@ export interface Prescription {
   refillSchedule: Repeat;
   until: string | null;
   createdAt: string;
+  // Computed soonest upcoming refill (list endpoints only); null = none upcoming.
+  nextRefillOn?: string | null;
 }
 
 export interface AppointmentOccurrence {

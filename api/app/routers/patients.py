@@ -8,7 +8,12 @@ from ..auth import hash_password
 from ..db import get_db
 from ..logging_setup import get_logger
 from ..models import Appointment, Patient, Prescription
-from ..occurrences import expand_appointment, expand_prescription, next_appointment_start
+from ..occurrences import (
+    expand_appointment,
+    expand_prescription,
+    next_appointment_start,
+    next_refill_date,
+)
 from ..recurrence import add_months
 from ..schemas import (
     AdminOccurrence,
@@ -18,7 +23,7 @@ from ..schemas import (
     PatientListItem,
     PatientOut,
     PatientUpdate,
-    PrescriptionOut,
+    PrescriptionWithNext,
 )
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
@@ -196,11 +201,20 @@ def patient_refill_schedule(
     return rows
 
 
-@router.get("/{patient_id}/prescriptions", response_model=list[PrescriptionOut])
+@router.get("/{patient_id}/prescriptions", response_model=list[PrescriptionWithNext])
 def list_patient_prescriptions(patient_id: int, db: Session = Depends(get_db)):
     _get_patient(db, patient_id)
-    return db.scalars(
+    rxs = db.scalars(
         select(Prescription)
         .where(Prescription.patient_id == patient_id)
+        .options(selectinload(Prescription.exceptions))
         .order_by(Prescription.refill_on)
     ).all()
+
+    today = datetime.now(timezone.utc).date()
+    items = []
+    for r in rxs:
+        item = PrescriptionWithNext.model_validate(r)
+        item.next_refill_on = next_refill_date(r, today)
+        items.append(item)
+    return items
