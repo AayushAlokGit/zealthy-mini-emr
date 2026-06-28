@@ -14,7 +14,7 @@ from ..schemas import (
     AppointmentUpdate,
     OccurrenceException,
 )
-from ..services import emit_notification
+from ..notifications import emit_notification
 
 router = APIRouter(prefix="/api", tags=["appointments"])
 log = get_logger("appointments")

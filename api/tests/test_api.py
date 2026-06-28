@@ -199,6 +199,39 @@ def test_cannot_edit_occurrence_of_one_time_appointment(client):
     assert res.status_code == 422
 
 
+def test_next_appointment_skips_cancelled_occurrence(client):
+    pid = _create_patient(client).json()["id"]
+    appt = _recurring_appointment(client, pid)
+    schedule = client.get(f"/api/patients/{pid}/schedule").json()
+    first, second = schedule[0], schedule[1]
+
+    listed = {p["id"]: p for p in client.get("/api/patients").json()}[pid]
+    assert listed["nextAppointment"][:19] == first["occursAt"][:19]
+
+    client.put(
+        f"/api/appointments/{appt['id']}/exceptions",
+        json={"occurrenceStart": first["occurrenceStart"], "cancelled": True},
+    )
+
+    listed = {p["id"]: p for p in client.get("/api/patients").json()}[pid]
+    assert listed["nextAppointment"][:19] == second["occursAt"][:19]
+
+
+def test_next_appointment_reflects_rescheduled_occurrence(client):
+    pid = _create_patient(client).json()["id"]
+    appt = _recurring_appointment(client, pid)
+    slot = client.get(f"/api/patients/{pid}/schedule").json()[0]["occurrenceStart"]
+    moved = _future(2)
+
+    client.put(
+        f"/api/appointments/{appt['id']}/exceptions",
+        json={"occurrenceStart": slot, "startAt": moved},
+    )
+
+    listed = {p["id"]: p for p in client.get("/api/patients").json()}[pid]
+    assert listed["nextAppointment"][:19] == moved[:19]
+
+
 def test_reschedule_single_refill(client):
     pid = _create_patient(client).json()["id"]
     rx = _recurring_prescription(client, pid)

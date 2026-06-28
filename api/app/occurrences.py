@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 
 from .models import Appointment, Prescription
-from .recurrence import SlotOverride, expand_slots
+from .recurrence import SlotOverride, add_months, expand_slots, next_occurrence
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,24 @@ class RefillOccurrence:
 
 def _midnight(d: date) -> datetime:
     return datetime.combine(d, time.min, tzinfo=timezone.utc)
+
+
+def next_appointment_start(appt: Appointment, ref: datetime) -> datetime | None:
+    """Soonest upcoming occurrence start at/after `ref`, honoring exceptions.
+
+    One-time and exception-free series take the cheap closed-form path. Series
+    with overrides are expanded over a generous window so cancelled occurrences
+    are skipped and rescheduled ones surface at their new time.
+    """
+    if not appt.exceptions:
+        return next_occurrence(appt.start_at, appt.repeat, appt.until, ref)
+
+    upcoming = [
+        occ.effective_start
+        for occ in expand_appointment(appt, ref, add_months(ref, 12))
+        if not occ.cancelled and occ.effective_start >= ref
+    ]
+    return min(upcoming) if upcoming else None
 
 
 def expand_appointment(

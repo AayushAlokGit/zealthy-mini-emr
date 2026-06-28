@@ -14,7 +14,7 @@ from ..schemas import (
     PrescriptionUpdate,
     RefillException,
 )
-from ..services import emit_notification
+from ..notifications import emit_notification
 
 router = APIRouter(prefix="/api", tags=["prescriptions"])
 log = get_logger("prescriptions")

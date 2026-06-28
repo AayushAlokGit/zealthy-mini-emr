@@ -122,7 +122,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ### Tests
 
 ```bash
-cd api && pytest          # 37 tests: recurrence engine + API flows
+cd api && pytest          # 40 tests: recurrence engine + API flows
 cd web && npm run build   # typecheck + production build
 ```
 

@@ -8,8 +8,8 @@ from ..auth import hash_password
 from ..db import get_db
 from ..logging_setup import get_logger
 from ..models import Appointment, Patient, Prescription
-from ..occurrences import expand_appointment, expand_prescription
-from ..recurrence import add_months, next_occurrence
+from ..occurrences import expand_appointment, expand_prescription, next_appointment_start
+from ..recurrence import add_months
 from ..schemas import (
     AdminOccurrence,
     AdminRefillOccurrence,
@@ -29,7 +29,10 @@ log = get_logger("patients")
 def list_patients(db: Session = Depends(get_db)):
     patients = db.scalars(
         select(Patient)
-        .options(selectinload(Patient.appointments), selectinload(Patient.prescriptions))
+        .options(
+            selectinload(Patient.appointments).selectinload(Appointment.exceptions),
+            selectinload(Patient.prescriptions),
+        )
         .order_by(Patient.name)
     ).all()
 
@@ -41,7 +44,7 @@ def list_patients(db: Session = Depends(get_db)):
 
         next_appt = None
         for a in appts:
-            nxt = next_occurrence(a.start_at, a.repeat, a.until, now)
+            nxt = next_appointment_start(a, now)
             if nxt and (next_appt is None or nxt < next_appt):
                 next_appt = nxt
 
